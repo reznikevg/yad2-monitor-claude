@@ -328,6 +328,10 @@ def fetch_via_api(api_url: str, label: str) -> Optional[dict]:
     Fetch listings via Yad2's internal JSON API (gw.yad2.co.il).
     Returns dict of {id: listing} or None on failure.
     Much faster + more reliable than Playwright. Tries this first.
+
+    If WORKER_PROXY env var is set (e.g. https://yad2-proxy.example.workers.dev),
+    the API call is routed through the Cloudflare Worker — bypasses CF datacenter
+    blocks on GitHub Actions IPs.
     """
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -336,9 +340,17 @@ def fetch_via_api(api_url: str, label: str) -> Optional[dict]:
         "Origin": "https://www.yad2.co.il",
         "Referer": "https://www.yad2.co.il/",
     }
+    # Optional Worker proxy — replaces gw.yad2.co.il host
+    worker = os.environ.get("WORKER_PROXY", "").rstrip("/")
+    target_url = api_url
+    if worker:
+        target_url = api_url.replace("https://gw.yad2.co.il", worker)
+        worker_token = os.environ.get("WORKER_TOKEN", "")
+        if worker_token:
+            headers["X-Auth-Token"] = worker_token
     try:
-        log.info(f"[{label}] API → {api_url[:90]}…")
-        r = requests.get(api_url, headers=headers, timeout=15, verify=False)
+        log.info(f"[{label}] API → {target_url[:90]}…")
+        r = requests.get(target_url, headers=headers, timeout=20, verify=False)
         if r.status_code != 200:
             log.warning(f"[{label}] API status {r.status_code}: {r.text[:200]}")
             return None
