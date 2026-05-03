@@ -52,6 +52,16 @@ jobs:
             echo "mode=monitor" >> $GITHUB_OUTPUT
           fi
 
+      - name: DEBUG worker response
+        if: steps.mode.outputs.mode == 'monitor'
+        run: |
+          echo "=== Worker health ==="
+          curl -sS "https://yad2-proxy.reznikevg.workers.dev/" | head -c 500
+          echo ""
+          echo "=== Worker debug for Source B ==="
+          curl -sS "https://yad2-proxy.reznikevg.workers.dev/realestate-feed/rent/map?region=1&multiNeighborhood=470,991420,991421,20436&maxPrice=10000&minRooms=4&_debug=1" | head -c 2000
+          echo ""
+
       - name: Run monitor
         if: steps.mode.outputs.mode == 'monitor'
         env:
