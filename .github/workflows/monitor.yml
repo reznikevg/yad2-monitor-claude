@@ -1,0 +1,82 @@
+name: Yad2 Monitor
+
+on:
+  schedule:
+    # Every 10 min, 03:00–20:59 UTC = 06:00–23:59 IST
+    - cron: '*/10 3-20 * * *'
+    # Daily summary at 08:00 UTC = 11:00 IST
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Run mode: monitor or summary'
+        default: 'monitor'
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Cache Playwright Chromium
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('requirements.txt') }}
+
+      - name: Install Playwright Chromium
+        run: playwright install chromium --with-deps
+
+      - name: Determine run mode
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "mode=${{ github.event.inputs.mode }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.schedule }}" = "0 8 * * *" ]; then
+            echo "mode=summary" >> $GITHUB_OUTPUT
+          else
+            echo "mode=monitor" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run monitor
+        if: steps.mode.outputs.mode == 'monitor'
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          STATE_DIR: ${{ github.workspace }}/state
+        run: python yad2_monitor.py
+
+      - name: Run daily summary
+        if: steps.mode.outputs.mode == 'summary'
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          STATE_DIR: ${{ github.workspace }}/state
+        run: python yad2_monitor.py --summary
+
+      - name: Commit state changes
+        run: |
+          git config user.name "yad2-bot"
+          git config user.email "yad2-bot@users.noreply.github.com"
+          git add state/
+          if git diff --staged --quiet; then
+            echo "No state changes to commit"
+          else
+            git commit -m "state: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            git pull --rebase origin main
+            git push
+          fi

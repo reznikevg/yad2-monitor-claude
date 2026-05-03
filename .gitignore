@@ -1,0 +1,11 @@
+yad2-venv/
+yad2-rent-monitor/
+state/monitor.log
+state/cron.log
+state/failed_alerts.txt
+state/debug_*.png
+state/*.tmp
+__pycache__/
+*.pyc
+.DS_Store
+.a5c/
