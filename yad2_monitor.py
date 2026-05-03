@@ -52,6 +52,11 @@ SOURCES = {
             "?maxPrice=10000&minRooms=4&parking=1&shelter=1&area=11&city=6600&neighborhood=793"
             "&bBox=32.021438%2C34.773431%2C32.029569%2C34.785892&zoom=15"
         ),
+        "api_url": (
+            "https://gw.yad2.co.il/realestate-feed/rent/map"
+            "?region=3&maxPrice=10000&minRooms=4&parking=1&shelter=1"
+            "&area=11&city=6600&neighborhood=793"
+        ),
         "state_file": STATE_FILE_A,
     },
     "B": {
@@ -60,6 +65,11 @@ SOURCES = {
             "https://www.yad2.co.il/realestate/rent/center-and-sharon"
             "?maxPrice=10000&minRooms=4"
             "&multiNeighborhood=470%2C991420%2C991421%2C20436"
+        ),
+        "api_url": (
+            "https://gw.yad2.co.il/realestate-feed/rent/map"
+            "?region=1&multiNeighborhood=470,991420,991421,20436"
+            "&maxPrice=10000&minRooms=4"
         ),
         "state_file": STATE_FILE_B,
     },
@@ -310,6 +320,43 @@ def normalize_listing(raw: dict, source_type: str) -> Optional[dict]:
 
     except Exception as e:
         log.debug(f"normalize_listing error: {e} | raw={str(raw)[:100]}")
+        return None
+
+
+def fetch_via_api(api_url: str, label: str) -> Optional[dict]:
+    """
+    Fetch listings via Yad2's internal JSON API (gw.yad2.co.il).
+    Returns dict of {id: listing} or None on failure.
+    Much faster + more reliable than Playwright. Tries this first.
+    """
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "application/json",
+        "Accept-Language": "he-IL,he;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Origin": "https://www.yad2.co.il",
+        "Referer": "https://www.yad2.co.il/",
+    }
+    try:
+        log.info(f"[{label}] API → {api_url[:90]}…")
+        r = requests.get(api_url, headers=headers, timeout=15, verify=False)
+        if r.status_code != 200:
+            log.warning(f"[{label}] API status {r.status_code}: {r.text[:200]}")
+            return None
+        data = r.json()
+        markers = (data.get("data") or {}).get("markers") or []
+        log.info(f"[{label}] API returned {len(markers)} markers")
+        if not markers:
+            return None
+
+        listings = {}
+        for raw in markers:
+            normalized = normalize_listing(raw, "next_data")
+            if normalized:
+                listings[normalized["id"]] = normalized
+        log.info(f"[{label}] API normalized {len(listings)} valid listings")
+        return listings if listings else None
+    except Exception as e:
+        log.warning(f"[{label}] API fetch failed: {e}")
         return None
 
 
@@ -589,76 +636,82 @@ async def main():
         last = state.get("lastCheck", "never")
         log.info(f"[Source {src}] Loaded {n} listings, lastCheck={last}")
 
-    # ── Step 2: Fetch pages ───────────────────────────────────────
+    # ── Step 2a: API first (fast, reliable, less likely blocked) ──
     fetched = {}
+    needs_browser = []
+    for src_key, src_info in SOURCES.items():
+        api_url = src_info.get("api_url")
+        if api_url:
+            api_result = fetch_via_api(api_url, src_info["label"])
+            if api_result:
+                fetched[src_key] = api_result
+                continue
+        needs_browser.append(src_key)
+        log.warning(f"[Source {src_key}] API failed, will try Playwright fallback")
+
+    # ── Step 2b: Playwright fallback only for failed sources ──────
     failed_sources = []
-
-    async with async_playwright() as pw:
-        browser = await pw.chromium.launch(
-            headless=True,
-            args=[
-                "--no-sandbox",
-                "--disable-blink-features=AutomationControlled",
-                "--disable-dev-shm-usage",
-                "--disable-infobars",
-                "--window-size=1280,900",
-                "--lang=he-IL",
-            ],
-        )
-
-        def make_context(pw_browser):
-            return pw_browser.new_context(
-                user_agent=(
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/124.0.0.0 Safari/537.36"
-                ),
-                viewport={"width": 1280, "height": 900},
-                locale="he-IL",
-                timezone_id="Asia/Jerusalem",
-                extra_http_headers={
-                    "Accept-Language": "he-IL,he;q=0.9,en-US;q=0.8,en;q=0.7",
-                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-                    "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
-                    "sec-ch-ua-mobile": "?0",
-                    "sec-ch-ua-platform": '"Windows"',
-                },
+    if needs_browser:
+        async with async_playwright() as pw:
+            browser = await pw.chromium.launch(
+                headless=True,
+                args=[
+                    "--no-sandbox",
+                    "--disable-blink-features=AutomationControlled",
+                    "--disable-dev-shm-usage",
+                    "--disable-infobars",
+                    "--window-size=1280,900",
+                    "--lang=he-IL",
+                ],
             )
 
-        context = await make_context(browser)
-
-        # Patch navigator.webdriver = false on every page
-        await context.add_init_script("""
-            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-            Object.defineProperty(navigator, 'plugins', { get: () => [1,2,3,4,5] });
-            Object.defineProperty(navigator, 'languages', { get: () => ['he-IL','he','en-US','en'] });
-            window.chrome = { runtime: {} };
-        """)
-
-        for src_key, src_info in SOURCES.items():
-            listings = await fetch_listings(context, src_info["url"], src_info["label"])
-            # Retry once with a fresh context if blocked (0 items)
-            if listings is None:
-                log.warning(f"[Source {src_key}] Retrying with fresh context…")
-                await context.close()
-                await asyncio.sleep(5)
-                context = await make_context(browser)
-                await context.add_init_script("""
+            async def make_ctx():
+                ctx = await browser.new_context(
+                    user_agent=(
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/124.0.0.0 Safari/537.36"
+                    ),
+                    viewport={"width": 1280, "height": 900},
+                    locale="he-IL",
+                    timezone_id="Asia/Jerusalem",
+                    extra_http_headers={
+                        "Accept-Language": "he-IL,he;q=0.9,en-US;q=0.8,en;q=0.7",
+                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                        "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+                        "sec-ch-ua-mobile": "?0",
+                        "sec-ch-ua-platform": '"Windows"',
+                    },
+                )
+                await ctx.add_init_script("""
                     Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
                     Object.defineProperty(navigator, 'plugins', { get: () => [1,2,3,4,5] });
                     Object.defineProperty(navigator, 'languages', { get: () => ['he-IL','he','en-US','en'] });
                     window.chrome = { runtime: {} };
                 """)
+                return ctx
+
+            context = await make_ctx()
+
+            for src_key in needs_browser:
+                src_info = SOURCES[src_key]
                 listings = await fetch_listings(context, src_info["url"], src_info["label"])
+                # Retry once with fresh context on Cloudflare block
+                if listings is None:
+                    log.warning(f"[Source {src_key}] Retrying with fresh context…")
+                    await context.close()
+                    await asyncio.sleep(5)
+                    context = await make_ctx()
+                    listings = await fetch_listings(context, src_info["url"], src_info["label"])
 
-            if listings is None:
-                failed_sources.append(src_key)
-                log.error(f"[Source {src_key}] FAILED to fetch listings (after retry)")
-            else:
-                fetched[src_key] = listings
+                if listings is None:
+                    failed_sources.append(src_key)
+                    log.error(f"[Source {src_key}] FAILED to fetch listings (after retry)")
+                else:
+                    fetched[src_key] = listings
 
-        await context.close()
-        await browser.close()
+            await context.close()
+            await browser.close()
 
     # ── Error handling: both failed ───────────────────────────────
     if len(failed_sources) == 2:
