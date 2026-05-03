@@ -52,23 +52,16 @@ jobs:
             echo "mode=monitor" >> $GITHUB_OUTPUT
           fi
 
-      - name: DEBUG worker response
-        if: steps.mode.outputs.mode == 'monitor'
-        run: |
-          echo "=== Worker health ==="
-          curl -sS "https://yad2-proxy.reznikevg.workers.dev/" | head -c 500
-          echo ""
-          echo "=== Worker debug for Source B ==="
-          curl -sS "https://yad2-proxy.reznikevg.workers.dev/realestate-feed/rent/map?region=1&multiNeighborhood=470,991420,991421,20436&maxPrice=10000&minRooms=4&_debug=1" | head -c 2000
-          echo ""
-
       - name: Run monitor
         if: steps.mode.outputs.mode == 'monitor'
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           STATE_DIR: ${{ github.workspace }}/state
-          WORKER_PROXY: https://yad2-proxy.reznikevg.workers.dev
+          # Source B blocked on GitHub Actions (Yad2 Radware bot manager
+          # blocks datacenter IPs, including via CF Worker proxy). Local
+          # cron handles B 24/7 from a residential IP.
+          SKIP_SOURCES: B
         run: python yad2_monitor.py
 
       - name: Run daily summary
@@ -77,7 +70,7 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           STATE_DIR: ${{ github.workspace }}/state
-          WORKER_PROXY: https://yad2-proxy.reznikevg.workers.dev
+          SKIP_SOURCES: B
         run: python yad2_monitor.py --summary
 
       - name: Commit state changes
