@@ -58,6 +58,7 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           STATE_DIR: ${{ github.workspace }}/state
+          SKIP_SOURCES: B
         run: python yad2_monitor.py
 
       - name: Run daily summary
@@ -66,6 +67,7 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           STATE_DIR: ${{ github.workspace }}/state
+          SKIP_SOURCES: B
         run: python yad2_monitor.py --summary
 
       - name: Commit state changes

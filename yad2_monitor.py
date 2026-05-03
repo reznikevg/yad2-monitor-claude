@@ -639,7 +639,15 @@ async def main():
     # ── Step 2a: API first (fast, reliable, less likely blocked) ──
     fetched = {}
     needs_browser = []
+    # Allow skipping sources via env var (e.g. SKIP_SOURCES=B on GitHub Actions
+    # where Cloudflare blocks the multiNeighborhood endpoint regardless of path)
+    skip_sources = set(s.strip() for s in os.environ.get("SKIP_SOURCES", "").split(",") if s.strip())
+    if skip_sources:
+        log.info(f"Skipping sources via SKIP_SOURCES env var: {skip_sources}")
     for src_key, src_info in SOURCES.items():
+        if src_key in skip_sources:
+            log.info(f"[Source {src_key}] Skipped via SKIP_SOURCES")
+            continue
         api_url = src_info.get("api_url")
         if api_url:
             api_result = fetch_via_api(api_url, src_info["label"])
