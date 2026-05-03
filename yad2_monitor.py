@@ -518,6 +518,8 @@ def build_telegram_message(results: dict, counts: dict) -> Optional[str]:
     parts = [f"🏠 <b>Yad2 Monitor</b> | {ts}\n"]
 
     for src_key, src_info in SOURCES.items():
+        if src_key not in results:
+            continue
         new_items = results[src_key]["new"]
         updated_items = results[src_key]["updated"]
         if not new_items and not updated_items:
@@ -598,25 +600,60 @@ async def main():
                 "--no-sandbox",
                 "--disable-blink-features=AutomationControlled",
                 "--disable-dev-shm-usage",
+                "--disable-infobars",
                 "--window-size=1280,900",
+                "--lang=he-IL",
             ],
         )
-        # Set a realistic user-agent context
-        context = await browser.new_context(
-            user_agent=(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/124.0.0.0 Safari/537.36"
-            ),
-            viewport={"width": 1280, "height": 900},
-            locale="he-IL",
-        )
+
+        def make_context(pw_browser):
+            return pw_browser.new_context(
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/124.0.0.0 Safari/537.36"
+                ),
+                viewport={"width": 1280, "height": 900},
+                locale="he-IL",
+                timezone_id="Asia/Jerusalem",
+                extra_http_headers={
+                    "Accept-Language": "he-IL,he;q=0.9,en-US;q=0.8,en;q=0.7",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                    "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+                    "sec-ch-ua-mobile": "?0",
+                    "sec-ch-ua-platform": '"Windows"',
+                },
+            )
+
+        context = await make_context(browser)
+
+        # Patch navigator.webdriver = false on every page
+        await context.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            Object.defineProperty(navigator, 'plugins', { get: () => [1,2,3,4,5] });
+            Object.defineProperty(navigator, 'languages', { get: () => ['he-IL','he','en-US','en'] });
+            window.chrome = { runtime: {} };
+        """)
 
         for src_key, src_info in SOURCES.items():
             listings = await fetch_listings(context, src_info["url"], src_info["label"])
+            # Retry once with a fresh context if blocked (0 items)
+            if listings is None:
+                log.warning(f"[Source {src_key}] Retrying with fresh context…")
+                await context.close()
+                await asyncio.sleep(5)
+                context = await make_context(browser)
+                await context.add_init_script("""
+                    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                    Object.defineProperty(navigator, 'plugins', { get: () => [1,2,3,4,5] });
+                    Object.defineProperty(navigator, 'languages', { get: () => ['he-IL','he','en-US','en'] });
+                    window.chrome = { runtime: {} };
+                """)
+                listings = await fetch_listings(context, src_info["url"], src_info["label"])
+
             if listings is None:
                 failed_sources.append(src_key)
-                log.error(f"[Source {src_key}] FAILED to fetch listings")
+                log.error(f"[Source {src_key}] FAILED to fetch listings (after retry)")
             else:
                 fetched[src_key] = listings
 
