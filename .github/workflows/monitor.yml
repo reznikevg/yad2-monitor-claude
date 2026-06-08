@@ -2,8 +2,8 @@ name: Yad2 Monitor
 
 on:
   schedule:
-    # Every 10 min, 03:00–20:59 UTC = 06:00–23:59 IST
-    - cron: '*/10 3-20 * * *'
+    # Every 30 min, 03:00–20:59 UTC = 06:00–23:59 IST
+    - cron: '*/30 3-20 * * *'
     # Daily summary at 08:00 UTC = 11:00 IST
     - cron: '0 8 * * *'
   workflow_dispatch:
@@ -58,10 +58,9 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           STATE_DIR: ${{ github.workspace }}/state
-          # Source B blocked on GitHub Actions (Yad2 Radware bot manager
-          # blocks datacenter IPs, including via CF Worker proxy). Local
-          # cron handles B 24/7 from a residential IP.
-          SKIP_SOURCES: B
+          # curl_cffi (chrome120 TLS fingerprint) + half-hour schedule —
+          # if Source B still gets blocked, set SKIP_SOURCES=B as a repo var.
+          SKIP_SOURCES: ${{ vars.SKIP_SOURCES }}
         run: python yad2_monitor.py
 
       - name: Run daily summary

@@ -28,6 +28,16 @@ from typing import Optional
 import requests
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
 
+# curl_cffi impersonates a real Chrome TLS fingerprint — defeats Radware bot
+# manager which blocks plain Python requests (and GitHub Actions IPs). Optional
+# dependency — falls back to requests if not installed.
+try:
+    from curl_cffi import requests as cffi_requests  # type: ignore
+    HAS_CURL_CFFI = True
+except ImportError:
+    cffi_requests = None
+    HAS_CURL_CFFI = False
+
 # ─────────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────────
@@ -348,11 +358,31 @@ def fetch_via_api(api_url: str, label: str) -> Optional[dict]:
         worker_token = os.environ.get("WORKER_TOKEN", "")
         if worker_token:
             headers["X-Auth-Token"] = worker_token
+    # Prefer curl_cffi (impersonates Chrome TLS fingerprint → defeats Radware
+    # bot manager that blocks plain `requests` from datacenter IPs).
+    # Falls back to plain `requests` if curl_cffi isn't installed.
+    use_cffi = HAS_CURL_CFFI and not worker  # via worker, no impersonation needed
+    client_label = "curl_cffi/chrome120" if use_cffi else "requests"
     try:
-        log.info(f"[{label}] API → {target_url[:90]}…")
-        r = requests.get(target_url, headers=headers, timeout=20, verify=False)
+        log.info(f"[{label}] API ({client_label}) → {target_url[:90]}…")
+        if use_cffi:
+            r = cffi_requests.get(
+                target_url,
+                headers=headers,
+                timeout=20,
+                impersonate="chrome120",
+                verify=False,
+            )
+        else:
+            r = requests.get(target_url, headers=headers, timeout=20, verify=False)
         if r.status_code != 200:
             log.warning(f"[{label}] API status {r.status_code}: {r.text[:200]}")
+            return None
+        # Detect Radware/CF challenge — response is HTML, not JSON
+        ctype = (r.headers.get("content-type") or "").lower()
+        if "json" not in ctype:
+            snippet = (r.text or "")[:200].replace("\n", " ")
+            log.warning(f"[{label}] non-JSON response ({ctype}): {snippet}")
             return None
         data = r.json()
         markers = (data.get("data") or {}).get("markers") or []
@@ -733,26 +763,49 @@ async def main():
             await context.close()
             await browser.close()
 
+    # ── Failure throttling: only notify after N consecutive failures ──
+    # (avoid Telegram spam when Yad2 is blocking us run after run).
+    # Counter persisted in each source's state file. Reset to 0 on success.
+    FAIL_THRESHOLD = int(os.environ.get("FAIL_THRESHOLD", "3"))
+    for src_key in fetched.keys():
+        states[src_key]["consecutiveFailures"] = 0
+    for src_key in failed_sources:
+        prev = int(states[src_key].get("consecutiveFailures", 0))
+        states[src_key]["consecutiveFailures"] = prev + 1
+
     # ── Error handling: both failed ───────────────────────────────
     if len(failed_sources) == 2:
-        msg = (
-            f"⚠️ <b>Yad2 Monitor — שגיאה קריטית</b>\n\n"
-            f"שני המקורות לא נטענו ב-{now_ist()}\n"
-            f"• Source A ({SOURCES['A']['label']}) — נכשל\n"
-            f"• Source B ({SOURCES['B']['label']}) — נכשל\n\n"
-            f"בדוק את קובץ הלוג: {LOG_FILE}"
-        )
-        send_telegram(msg)
-        log.error("Both sources failed — exiting without state update.")
+        worst = max(int(states[k].get("consecutiveFailures", 0)) for k in failed_sources)
+        if worst >= FAIL_THRESHOLD:
+            msg = (
+                f"⚠️ <b>Yad2 Monitor — שגיאה קריטית</b>\n\n"
+                f"שני המקורות לא נטענו ב-{now_ist()} ({worst} כשלים רצופים)\n"
+                f"• Source A ({SOURCES['A']['label']}) — נכשל\n"
+                f"• Source B ({SOURCES['B']['label']}) — נכשל"
+            )
+            send_telegram(msg)
+        else:
+            log.info(f"Both failed but below threshold ({worst}/{FAIL_THRESHOLD}) — no Telegram.")
+        # Persist failure counters before exit
+        for src_key in failed_sources:
+            save_state(SOURCES[src_key]["state_file"], states[src_key])
+        log.error("Both sources failed — exiting without listing-state update.")
         return
 
     # ── Error handling: single source failed ──────────────────────
     for src_key in failed_sources:
-        warn = (
-            f"⚠️ Yad2 Monitor — Source {src_key} "
-            f"({SOURCES[src_key]['label']}) לא נטען ב-{now_ist()}"
-        )
-        send_telegram(warn)
+        fails = int(states[src_key].get("consecutiveFailures", 0))
+        if fails >= FAIL_THRESHOLD:
+            warn = (
+                f"⚠️ Yad2 Monitor — Source {src_key} "
+                f"({SOURCES[src_key]['label']}) לא נטען ב-{now_ist()} "
+                f"({fails} כשלים רצופים)"
+            )
+            send_telegram(warn)
+        else:
+            log.info(f"[Source {src_key}] failed but below threshold ({fails}/{FAIL_THRESHOLD}) — no Telegram.")
+        # Persist failure counter
+        save_state(SOURCES[src_key]["state_file"], states[src_key])
 
     # ── Step 3: Detect changes ────────────────────────────────────
     results = {}
