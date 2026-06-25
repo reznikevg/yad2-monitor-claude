@@ -42,8 +42,15 @@ except ImportError:
 # CONFIG
 # ─────────────────────────────────────────────
 
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "8210921909:AAFdWOV2asiHvz66Z3_-So4LqS7tD1hpGO4")
-TELEGRAM_CHAT_ID = int(os.environ.get("TELEGRAM_CHAT_ID", "678043915"))
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
+_chat_id_raw = os.environ.get("TELEGRAM_CHAT_ID", "")
+if not TELEGRAM_TOKEN or not _chat_id_raw:
+    sys.stderr.write(
+        "FATAL: TELEGRAM_TOKEN and TELEGRAM_CHAT_ID env vars are required.\n"
+        "Set them in your shell, crontab, or as repository secrets.\n"
+    )
+    sys.exit(2)
+TELEGRAM_CHAT_ID = int(_chat_id_raw)
 TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
 
 # Local: ~/AIcode/Yad2/yad2-rent-monitor  |  CI: STATE_DIR env var → ./state/
