@@ -103,7 +103,7 @@
       "url": "https://www.yad2.co.il/item/axrcn2ck",
       "hash": "32d69db8ac772191bf9fc4ea3a9dbebe",
       "firstSeen": "2026-06-17 19:39:43",
-      "lastSeen": "2026-06-30 00:08:49"
+      "lastSeen": "2026-06-30 09:57:00"
     },
     "57108307": {
       "id": "57108307",
@@ -118,7 +118,7 @@
       "url": "https://www.yad2.co.il/item/pqxz3prp",
       "hash": "3177ebf30a9842a752ceb66a9294ed06",
       "firstSeen": "2026-06-19 15:47:20",
-      "lastSeen": "2026-06-30 00:08:49"
+      "lastSeen": "2026-06-30 09:57:00"
     },
     "57153220": {
       "id": "57153220",
@@ -134,8 +134,23 @@
       "hash": "c6bc5ce4388cde4ba56e469adb1d1d66",
       "firstSeen": "2026-06-29 11:13:53",
       "lastSeen": "2026-06-30 00:08:49"
+    },
+    "57158540": {
+      "id": "57158540",
+      "price": 7700,
+      "rooms": "4",
+      "floor": "25",
+      "sqm": "100",
+      "prop_type": "דירה",
+      "tags": "",
+      "address": "אליהו קראוזה , חולון (אגרובנק)",
+      "description": "",
+      "url": "https://www.yad2.co.il/item/6nf4gr6n",
+      "hash": "58e45ed195bd02fd4b9a2f88471d0565",
+      "firstSeen": "2026-06-30 09:57:00",
+      "lastSeen": "2026-06-30 09:57:00"
     }
   },
-  "lastCheck": "2026-06-30 00:08:49",
+  "lastCheck": "2026-06-30 09:57:00",
   "consecutiveFailures": 0
 }
