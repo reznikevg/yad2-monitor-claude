@@ -103,7 +103,7 @@
       "url": "https://www.yad2.co.il/item/axrcn2ck",
       "hash": "32d69db8ac772191bf9fc4ea3a9dbebe",
       "firstSeen": "2026-06-17 19:39:43",
-      "lastSeen": "2026-07-12 14:39:12"
+      "lastSeen": "2026-07-12 16:20:23"
     },
     "57108307": {
       "id": "57108307",
@@ -118,7 +118,7 @@
       "url": "https://www.yad2.co.il/item/pqxz3prp",
       "hash": "3177ebf30a9842a752ceb66a9294ed06",
       "firstSeen": "2026-06-19 15:47:20",
-      "lastSeen": "2026-07-12 14:39:12"
+      "lastSeen": "2026-07-12 16:20:23"
     },
     "57153220": {
       "id": "57153220",
@@ -151,6 +151,6 @@
       "lastSeen": "2026-06-30 09:57:00"
     }
   },
-  "lastCheck": "2026-07-12 14:39:12",
+  "lastCheck": "2026-07-12 16:20:23",
   "consecutiveFailures": 0
 }
