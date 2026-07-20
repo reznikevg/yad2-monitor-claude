@@ -178,9 +178,24 @@
       "url": "https://www.yad2.co.il/item/vxms340b",
       "hash": "240bc5c71ae8378c0e4f17ec0ce80e95",
       "firstSeen": "2026-07-20 12:42:08",
-      "lastSeen": "2026-07-20 19:24:08"
+      "lastSeen": "2026-07-20 21:28:43"
+    },
+    "57257534": {
+      "id": "57257534",
+      "price": 8000,
+      "rooms": "4",
+      "floor": "1",
+      "sqm": "106",
+      "prop_type": "דירה",
+      "tags": "",
+      "address": "מנדלי מוכר ספרים , חולון (אגרובנק)",
+      "description": "",
+      "url": "https://www.yad2.co.il/item/dpqtbuds",
+      "hash": "ec65aeaa03bf1847555715bf569453cd",
+      "firstSeen": "2026-07-20 21:28:43",
+      "lastSeen": "2026-07-20 21:28:43"
     }
   },
-  "lastCheck": "2026-07-20 19:24:08",
+  "lastCheck": "2026-07-20 21:28:43",
   "consecutiveFailures": 0
 }
