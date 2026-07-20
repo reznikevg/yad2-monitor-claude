@@ -164,8 +164,23 @@
       "hash": "407e07accf2361f698a19f4680a01ca2",
       "firstSeen": "2026-07-13 18:43:06",
       "lastSeen": "2026-07-13 18:43:06"
+    },
+    "57254106": {
+      "id": "57254106",
+      "price": 6200,
+      "rooms": "4",
+      "floor": "1",
+      "sqm": "93",
+      "prop_type": "דירה",
+      "tags": "",
+      "address": "סוקולוב 47, חולון (אגרובנק)",
+      "description": "",
+      "url": "https://www.yad2.co.il/item/vxms340b",
+      "hash": "240bc5c71ae8378c0e4f17ec0ce80e95",
+      "firstSeen": "2026-07-20 12:42:08",
+      "lastSeen": "2026-07-20 12:42:08"
     }
   },
-  "lastCheck": "2026-07-19 18:58:32",
-  "consecutiveFailures": 5
+  "lastCheck": "2026-07-20 12:42:08",
+  "consecutiveFailures": 0
 }
