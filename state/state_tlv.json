@@ -178,7 +178,7 @@
       "url": "https://www.yad2.co.il/item/vxms340b",
       "hash": "240bc5c71ae8378c0e4f17ec0ce80e95",
       "firstSeen": "2026-07-20 12:42:08",
-      "lastSeen": "2026-08-03 21:16:48"
+      "lastSeen": "2026-08-03 23:11:29"
     },
     "57257534": {
       "id": "57257534",
@@ -208,7 +208,7 @@
       "url": "https://www.yad2.co.il/item/m2wc6a9l",
       "hash": "8131691ae945855d51036f668dfd6124",
       "firstSeen": "2026-07-22 13:40:09",
-      "lastSeen": "2026-08-03 21:16:48"
+      "lastSeen": "2026-08-03 23:11:29"
     },
     "57257747": {
       "id": "57257747",
@@ -224,8 +224,23 @@
       "hash": "834ff8b84ad28df17c84309139e66a53",
       "firstSeen": "2026-07-26 15:03:38",
       "lastSeen": "2026-08-03 19:02:17"
+    },
+    "57320422": {
+      "id": "57320422",
+      "price": 8300,
+      "rooms": "5",
+      "floor": "1",
+      "sqm": "120",
+      "prop_type": "דירה",
+      "tags": "",
+      "address": "זאב ז'בוטינסקי 58, חולון (אגרובנק)",
+      "description": "",
+      "url": "https://www.yad2.co.il/item/bcovb2n7",
+      "hash": "0a7bb10effb12d6db716d106ff34be1c",
+      "firstSeen": "2026-08-03 23:11:29",
+      "lastSeen": "2026-08-03 23:11:29"
     }
   },
-  "lastCheck": "2026-08-03 21:16:48",
+  "lastCheck": "2026-08-03 23:11:29",
   "consecutiveFailures": 0
 }
