@@ -178,7 +178,7 @@
       "url": "https://www.yad2.co.il/item/vxms340b",
       "hash": "240bc5c71ae8378c0e4f17ec0ce80e95",
       "firstSeen": "2026-07-20 12:42:08",
-      "lastSeen": "2026-08-03 19:02:17"
+      "lastSeen": "2026-08-03 21:16:48"
     },
     "57257534": {
       "id": "57257534",
@@ -208,7 +208,7 @@
       "url": "https://www.yad2.co.il/item/m2wc6a9l",
       "hash": "8131691ae945855d51036f668dfd6124",
       "firstSeen": "2026-07-22 13:40:09",
-      "lastSeen": "2026-08-03 19:02:17"
+      "lastSeen": "2026-08-03 21:16:48"
     },
     "57257747": {
       "id": "57257747",
@@ -226,6 +226,6 @@
       "lastSeen": "2026-08-03 19:02:17"
     }
   },
-  "lastCheck": "2026-08-03 19:02:17",
+  "lastCheck": "2026-08-03 21:16:48",
   "consecutiveFailures": 0
 }
