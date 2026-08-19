@@ -208,7 +208,7 @@
       "url": "https://www.yad2.co.il/item/m2wc6a9l",
       "hash": "8131691ae945855d51036f668dfd6124",
       "firstSeen": "2026-07-22 13:40:09",
-      "lastSeen": "2026-08-19 12:36:00"
+      "lastSeen": "2026-08-19 13:28:28"
     },
     "57257747": {
       "id": "57257747",
@@ -227,7 +227,7 @@
     },
     "57320422": {
       "id": "57320422",
-      "price": 8300,
+      "price": 7800,
       "rooms": "5",
       "floor": "1",
       "sqm": "120",
@@ -236,9 +236,15 @@
       "address": "זאב ז'בוטינסקי 58, חולון (אגרובנק)",
       "description": "",
       "url": "https://www.yad2.co.il/item/bcovb2n7",
-      "hash": "0a7bb10effb12d6db716d106ff34be1c",
+      "hash": "ced1c1cf76f6bbbd7a78ecd2cd36baf3",
       "firstSeen": "2026-08-03 23:11:29",
-      "lastSeen": "2026-08-19 12:36:00"
+      "lastSeen": "2026-08-19 13:28:28",
+      "_changed": {
+        "price": {
+          "old": 8300,
+          "new": 7800
+        }
+      }
     },
     "57323842": {
       "id": "57323842",
@@ -253,7 +259,7 @@
       "url": "https://www.yad2.co.il/item/k6zdfnb6",
       "hash": "23d31cccfbf5c5b036a75b2c6068c4c7",
       "firstSeen": "2026-08-04 14:23:28",
-      "lastSeen": "2026-08-19 12:36:00"
+      "lastSeen": "2026-08-19 13:28:28"
     },
     "57327716": {
       "id": "57327716",
@@ -268,7 +274,7 @@
       "url": "https://www.yad2.co.il/item/z84x3hck",
       "hash": "5f730e02326ff6c9fcd06a14110fc8d6",
       "firstSeen": "2026-08-05 11:36:05",
-      "lastSeen": "2026-08-19 12:36:00",
+      "lastSeen": "2026-08-19 13:28:28",
       "_changed": {
         "price": {
           "old": 8500,
@@ -304,7 +310,7 @@
       "url": "https://www.yad2.co.il/item/c8mvv5m3",
       "hash": "aa5f7ffe3204d1d55387f670310c3ab0",
       "firstSeen": "2026-08-16 14:45:38",
-      "lastSeen": "2026-08-19 12:36:00"
+      "lastSeen": "2026-08-19 13:28:28"
     },
     "57377501": {
       "id": "57377501",
@@ -334,9 +340,9 @@
       "url": "https://www.yad2.co.il/item/9758s4c8",
       "hash": "8cbffdbcad42cb20ce07990514d472ff",
       "firstSeen": "2026-08-16 19:51:45",
-      "lastSeen": "2026-08-19 12:36:00"
+      "lastSeen": "2026-08-19 13:28:28"
     }
   },
-  "lastCheck": "2026-08-19 12:36:00",
+  "lastCheck": "2026-08-19 13:28:28",
   "consecutiveFailures": 0
 }
