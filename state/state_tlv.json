@@ -208,7 +208,7 @@
       "url": "https://www.yad2.co.il/item/m2wc6a9l",
       "hash": "8131691ae945855d51036f668dfd6124",
       "firstSeen": "2026-07-22 13:40:09",
-      "lastSeen": "2026-08-19 17:33:21"
+      "lastSeen": "2026-08-19 18:49:19"
     },
     "57257747": {
       "id": "57257747",
@@ -238,7 +238,7 @@
       "url": "https://www.yad2.co.il/item/bcovb2n7",
       "hash": "ced1c1cf76f6bbbd7a78ecd2cd36baf3",
       "firstSeen": "2026-08-03 23:11:29",
-      "lastSeen": "2026-08-19 17:33:21",
+      "lastSeen": "2026-08-19 18:49:19",
       "_changed": {
         "price": {
           "old": 8300,
@@ -259,7 +259,7 @@
       "url": "https://www.yad2.co.il/item/k6zdfnb6",
       "hash": "23d31cccfbf5c5b036a75b2c6068c4c7",
       "firstSeen": "2026-08-04 14:23:28",
-      "lastSeen": "2026-08-19 17:33:21"
+      "lastSeen": "2026-08-19 18:49:19"
     },
     "57327716": {
       "id": "57327716",
@@ -274,7 +274,7 @@
       "url": "https://www.yad2.co.il/item/z84x3hck",
       "hash": "5f730e02326ff6c9fcd06a14110fc8d6",
       "firstSeen": "2026-08-05 11:36:05",
-      "lastSeen": "2026-08-19 17:33:21",
+      "lastSeen": "2026-08-19 18:49:19",
       "_changed": {
         "price": {
           "old": 8500,
@@ -310,7 +310,7 @@
       "url": "https://www.yad2.co.il/item/c8mvv5m3",
       "hash": "aa5f7ffe3204d1d55387f670310c3ab0",
       "firstSeen": "2026-08-16 14:45:38",
-      "lastSeen": "2026-08-19 17:33:21"
+      "lastSeen": "2026-08-19 18:49:19"
     },
     "57377501": {
       "id": "57377501",
@@ -340,9 +340,9 @@
       "url": "https://www.yad2.co.il/item/9758s4c8",
       "hash": "8cbffdbcad42cb20ce07990514d472ff",
       "firstSeen": "2026-08-16 19:51:45",
-      "lastSeen": "2026-08-19 17:33:21"
+      "lastSeen": "2026-08-19 18:49:19"
     }
   },
-  "lastCheck": "2026-08-19 17:33:21",
+  "lastCheck": "2026-08-19 18:49:19",
   "consecutiveFailures": 0
 }
