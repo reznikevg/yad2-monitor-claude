@@ -259,7 +259,7 @@
       "url": "https://www.yad2.co.il/item/k6zdfnb6",
       "hash": "23d31cccfbf5c5b036a75b2c6068c4c7",
       "firstSeen": "2026-08-04 14:23:28",
-      "lastSeen": "2026-09-04 10:45:37"
+      "lastSeen": "2026-09-04 15:32:41"
     },
     "57327716": {
       "id": "57327716",
@@ -371,8 +371,23 @@
       "hash": "7b0b044efe6ce268230f735fd83e1b32",
       "firstSeen": "2026-08-27 16:51:16",
       "lastSeen": "2026-09-04 10:45:37"
+    },
+    "57464491": {
+      "id": "57464491",
+      "price": 5900,
+      "rooms": "4",
+      "floor": "1",
+      "sqm": "93",
+      "prop_type": "דירה",
+      "tags": "",
+      "address": "סוקולוב 47, חולון (אגרובנק)",
+      "description": "",
+      "url": "https://www.yad2.co.il/item/80ssm7sq",
+      "hash": "281d5d8822d1add0bb9072387631b030",
+      "firstSeen": "2026-09-04 15:32:41",
+      "lastSeen": "2026-09-04 15:32:41"
     }
   },
-  "lastCheck": "2026-09-04 10:45:37",
+  "lastCheck": "2026-09-04 15:32:41",
   "consecutiveFailures": 0
 }
