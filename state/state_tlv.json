@@ -259,7 +259,7 @@
       "url": "https://www.yad2.co.il/item/k6zdfnb6",
       "hash": "23d31cccfbf5c5b036a75b2c6068c4c7",
       "firstSeen": "2026-08-04 14:23:28",
-      "lastSeen": "2026-09-09 15:46:12"
+      "lastSeen": "2026-09-09 20:03:13"
     },
     "57327716": {
       "id": "57327716",
@@ -374,7 +374,7 @@
     },
     "57464491": {
       "id": "57464491",
-      "price": 5900,
+      "price": 5500,
       "rooms": "4",
       "floor": "1",
       "sqm": "93",
@@ -383,9 +383,15 @@
       "address": "סוקולוב 47, חולון (אגרובנק)",
       "description": "",
       "url": "https://www.yad2.co.il/item/80ssm7sq",
-      "hash": "281d5d8822d1add0bb9072387631b030",
+      "hash": "13ba89d8e468b391c3012fd107ff9b57",
       "firstSeen": "2026-09-04 15:32:41",
-      "lastSeen": "2026-09-09 15:46:12"
+      "lastSeen": "2026-09-09 20:03:13",
+      "_changed": {
+        "price": {
+          "old": 5900,
+          "new": 5500
+        }
+      }
     },
     "57477303": {
       "id": "57477303",
@@ -400,7 +406,7 @@
       "url": "https://www.yad2.co.il/item/suxwvr27",
       "hash": "5dc3fb35477dad01d51b4c3ee2fbb914",
       "firstSeen": "2026-09-07 17:12:00",
-      "lastSeen": "2026-09-09 15:46:12"
+      "lastSeen": "2026-09-09 20:03:13"
     },
     "57480721": {
       "id": "57480721",
@@ -415,9 +421,9 @@
       "url": "https://www.yad2.co.il/item/nw5d6y09",
       "hash": "1d102d1e0dd5328c678b90ecd3e1503e",
       "firstSeen": "2026-09-08 15:39:37",
-      "lastSeen": "2026-09-09 15:46:12"
+      "lastSeen": "2026-09-09 20:03:13"
     }
   },
-  "lastCheck": "2026-09-09 15:46:12",
+  "lastCheck": "2026-09-09 20:03:13",
   "consecutiveFailures": 0
 }
