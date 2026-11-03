@@ -2,21 +2,25 @@
   "paused": false,
   "fail_threshold": 3,
   "scan_interval_minutes": 20,
-  "last_update_id": 0,
+  "last_update_id": 247798933,
   "sources": {
     "A": {
       "enabled": true,
       "label": "תל אביב / חולון (שכ׳ 793)",
       "url": "https://www.yad2.co.il/realestate/rent/tel-aviv-area?maxPrice=10000&minRooms=4&parking=1&shelter=1&area=11&city=6600&neighborhood=793&bBox=32.021438%2C34.773431%2C32.029569%2C34.785892&zoom=15",
       "api_url": "https://gw.yad2.co.il/realestate-feed/rent/map?region=3&maxPrice=10000&minRooms=4&parking=1&shelter=1&area=11&city=6600&neighborhood=793",
-      "state_file": "state_tlv.json"
+      "state_file": "state_tlv.json",
+      "mode": "alert",
+      "category": "realestate"
     },
     "B": {
       "enabled": true,
       "label": "מרכז והשרון",
       "url": "https://www.yad2.co.il/realestate/rent/center-and-sharon?maxPrice=10000&minRooms=4&multiNeighborhood=470%2C991420%2C991421%2C20436",
       "api_url": "https://gw.yad2.co.il/realestate-feed/rent/map?region=1&multiNeighborhood=470,991420,991421,20436&maxPrice=10000&minRooms=4",
-      "state_file": "state_center_sharon.json"
+      "state_file": "state_center_sharon.json",
+      "mode": "alert",
+      "category": "realestate"
     }
   },
   "welcome_menu_sent": true
