@@ -1,0 +1,5 @@
+name = "yad2-proxy"
+main = "src/worker.js"
+compatibility_date = "2024-09-01"
+account_id = "<YOUR_CLOUDFLARE_ACCOUNT_ID>"  # dashboard.cloudflare.com → Workers → account ID
+workers_dev = true
