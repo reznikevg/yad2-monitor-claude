@@ -2,7 +2,7 @@
   "paused": false,
   "fail_threshold": 3,
   "scan_interval_minutes": 20,
-  "last_update_id": 247798933,
+  "last_update_id": 247798937,
   "sources": {
     "A": {
       "enabled": true,
