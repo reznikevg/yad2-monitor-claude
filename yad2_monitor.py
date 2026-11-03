@@ -301,6 +301,305 @@ def yad2_web_url_to_api_url(web_url: str) -> str:
 
 
 # ─────────────────────────────────────────────
+# YAD2 LOCATION, NEIGHBORHOOD & VEHICLE CATALOG
+# ─────────────────────────────────────────────
+
+POPULAR_CITIES = [
+    {"name": "חולון", "city": "6600", "area": "11", "region": "3"},
+    {"name": "תל אביב יפו", "city": "5000", "area": "1", "region": "3"},
+    {"name": "ראשון לציון", "city": "8300", "area": "9", "region": "1"},
+    {"name": "רמת גן", "city": "8600", "area": "3", "region": "3"},
+    {"name": "גבעתיים", "city": "6300", "area": "3", "region": "3"},
+    {"name": "בת ים", "city": "6200", "area": "11", "region": "3"},
+    {"name": "באר יעקב", "city": "2530", "area": "9", "region": "1"},
+    {"name": "הרצליה", "city": "6400", "area": "18", "region": "1"},
+    {"name": "פתח תקווה", "city": "7900", "area": "4", "region": "1"},
+    {"name": "נתניה", "city": "7400", "area": "17", "region": "1"},
+    {"name": "רעננה", "city": "8700", "area": "42", "region": "1"},
+    {"name": "כפר סבא", "city": "6900", "area": "42", "region": "1"},
+    {"name": "רחובות", "city": "8400", "area": "12", "region": "1"},
+    {"name": "נס ציונה", "city": "7200", "area": "12", "region": "1"},
+    {"name": "ירושלים", "city": "3000", "area": "7", "region": "2"},
+    {"name": "חיפה", "city": "4000", "area": "5", "region": "5"},
+]
+
+POPULAR_CAR_MFGS = [
+    {"name": "מאזדה", "id": "27"},
+    {"name": "טויוטה", "id": "19"},
+    {"name": "יונדאי", "id": "21"},
+    {"name": "קיה", "id": "48"},
+    {"name": "סקודה", "id": "40"},
+    {"name": "מיני", "id": "29"},
+    {"name": "הונדה", "id": "17"},
+    {"name": "סוזוקי", "id": "38"},
+    {"name": "ניסאן", "id": "32"},
+    {"name": "פולקסווגן", "id": "42"},
+    {"name": "מיצובישי", "id": "28"},
+    {"name": "טסלה", "id": "221"},
+    {"name": "BYD / בי.ווי.די", "id": "312"},
+    {"name": "ב.מ.וו", "id": "7"},
+    {"name": "מרצדס", "id": "30"},
+    {"name": "אאודי", "id": "1"},
+]
+
+APT_FEATURE_TOGGLES = [
+    ("parking", "🅿️ חניה"),
+    ("shelter", "🛡 ממ״ד"),
+    ("elevator", "🛗 מעלית"),
+    ("balcony", "☀️ מרפסת"),
+    ("airConditioner", "❄️ מיזוג"),
+    ("renovated", "✨ משופצת"),
+    ("pets", "🐾 חיות מחמד"),
+    ("furniture", "🛋 מרוהטת"),
+    ("storage", "📦 מחסן"),
+    ("longTerm", "📅 לטווח ארוך"),
+    ("bars", "🪟 סורגים"),
+    ("accessibility", "♿ גישה לנכים"),
+]
+
+_YAD2_CATALOG: Dict[str, Any] = {
+    "loaded": False,
+    "cities_by_id": {},       # cityId -> {"name": str, "breadcrumbs": list}
+    "cities_by_name": {},     # cityName -> cityId
+    "hoods_by_id": {},        # hoodId -> {"id": str, "name": str, "city_name": str}
+    "hoods_by_city_name": {}, # cityName -> [{"id": str, "name": str, "city_name": str}, ...]
+    "mfg_by_id": {},          # mfgId -> name
+    "models_by_mfg": {},      # mfgId -> [{"id": str, "name": str}, ...]
+}
+
+
+def _cffi_get_json(url: str, params: Optional[dict] = None) -> Optional[dict]:
+    headers = {
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "he-IL,he;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Origin": "https://www.yad2.co.il",
+        "Referer": "https://www.yad2.co.il/realestate/rent",
+    }
+    if HAS_CURL_CFFI:
+        for profile in IMPERSONATE_PROFILES[:2]:
+            try:
+                r = cffi_requests.get(url, params=params, headers=headers, impersonate=profile, timeout=12, verify=False)
+                if r.status_code == 200 and "json" in r.headers.get("content-type", "").lower():
+                    return r.json()
+            except Exception:
+                pass
+    try:
+        r = requests.get(url, params=params, headers=headers, timeout=12, verify=False)
+        if r.status_code == 200:
+            return r.json()
+    except Exception:
+        pass
+    return None
+
+
+def ensure_yad2_catalog():
+    if _YAD2_CATALOG["loaded"]:
+        return
+    # Pre-seed with popular cities & car manufacturers so fallback is always instant
+    for pc in POPULAR_CITIES:
+        _YAD2_CATALOG["cities_by_id"][pc["city"]] = {"name": pc["name"], "breadcrumbs": []}
+        _YAD2_CATALOG["cities_by_name"][pc["name"]] = pc["city"]
+    for pm in POPULAR_CAR_MFGS:
+        _YAD2_CATALOG["mfg_by_id"][pm["id"]] = pm["name"]
+
+    data = _cffi_get_json("https://gw.yad2.co.il/search-options/realestate/rent?fields=city,neighborhood")
+    if data and isinstance(data.get("data"), dict):
+        raw = data["data"]
+        for c in raw.get("city") or []:
+            cid = str(c.get("value") or "").strip()
+            cname = str(c.get("text") or "").strip()
+            if cid and cname:
+                _YAD2_CATALOG["cities_by_id"][cid] = {"name": cname, "breadcrumbs": c.get("breadcrumbs") or []}
+                _YAD2_CATALOG["cities_by_name"][cname] = cid
+        for h in raw.get("neighborhood") or []:
+            hid = str(h.get("value") or "").strip()
+            hname = str(h.get("text") or "").strip()
+            bcs = h.get("breadcrumbs") or []
+            city_name = str(bcs[-1]).strip() if bcs else ""
+            if hid and hname:
+                info = {"id": hid, "name": hname, "city_name": city_name}
+                _YAD2_CATALOG["hoods_by_id"][hid] = info
+                if city_name:
+                    _YAD2_CATALOG["hoods_by_city_name"].setdefault(city_name, []).append(info)
+        for cname in _YAD2_CATALOG["hoods_by_city_name"]:
+            _YAD2_CATALOG["hoods_by_city_name"][cname].sort(key=lambda x: x["name"])
+
+    vdata = _cffi_get_json("https://gw.yad2.co.il/search-options/vehicles/cars?fields=manufacturer")
+    if vdata and isinstance(vdata.get("data"), dict):
+        for m in vdata["data"].get("manufacturer") or []:
+            mid = str(m.get("value") or "").strip()
+            mname = str(m.get("text") or "").strip()
+            if mid and mname:
+                _YAD2_CATALOG["mfg_by_id"][mid] = mname
+
+    _YAD2_CATALOG["loaded"] = True
+
+
+def get_city_name(city_id: str) -> str:
+    if not city_id:
+        return ""
+    ensure_yad2_catalog()
+    info = _YAD2_CATALOG["cities_by_id"].get(str(city_id))
+    return info["name"] if info else str(city_id)
+
+
+def get_hood_info(hood_id: str) -> Dict[str, str]:
+    ensure_yad2_catalog()
+    return _YAD2_CATALOG["hoods_by_id"].get(
+        str(hood_id),
+        {"id": str(hood_id), "name": f"שכונה {hood_id}", "city_name": ""},
+    )
+
+
+def get_city_neighborhoods(city_id_or_name: str) -> List[Dict[str, str]]:
+    ensure_yad2_catalog()
+    cname = get_city_name(city_id_or_name) if city_id_or_name in _YAD2_CATALOG["cities_by_id"] else city_id_or_name
+    return _YAD2_CATALOG["hoods_by_city_name"].get(cname, [])
+
+
+def get_selected_hood_ids(url: str) -> List[str]:
+    if not url:
+        return []
+    single = get_url_param(url, "neighborhood")
+    multi = get_url_param(url, "multiNeighborhood")
+    ids: List[str] = []
+    for raw in [single, multi]:
+        if raw:
+            for part in raw.split(","):
+                p = part.strip()
+                if p and p not in ids:
+                    ids.append(p)
+    return ids
+
+
+def set_selected_hood_ids(url: str, hood_ids: List[str]) -> str:
+    if not url:
+        return url
+    clean_ids = []
+    for h in hood_ids:
+        hs = str(h).strip()
+        if hs and hs not in clean_ids:
+            clean_ids.append(hs)
+    if len(clean_ids) == 0:
+        u = update_url_param(url, "neighborhood", None)
+        return update_url_param(u, "multiNeighborhood", None)
+    elif len(clean_ids) == 1:
+        u = update_url_param(url, "multiNeighborhood", None)
+        return update_url_param(u, "neighborhood", clean_ids[0])
+    else:
+        u = update_url_param(url, "neighborhood", None)
+        return update_url_param(u, "multiNeighborhood", ",".join(clean_ids))
+
+
+def search_yad2_locations(query: str) -> Dict[str, list]:
+    """Query Yad2 live address autocomplete for cities & neighborhoods matching Hebrew text."""
+    q = query.strip()
+    if not q:
+        return {"cities": [], "hoods": []}
+    res = _cffi_get_json("https://gw.yad2.co.il/address-autocomplete/realestate/v2", params={"text": q})
+    cities = (res or {}).get("cities") or []
+    hoods = (res or {}).get("hoods") or []
+
+    # Also supplement from local catalog if autocomplete returned few neighborhood matches
+    ensure_yad2_catalog()
+    seen_hoods = {str(h.get("hoodId")) for h in hoods}
+    for hid, hinfo in _YAD2_CATALOG["hoods_by_id"].items():
+        if hid in seen_hoods:
+            continue
+        if q in hinfo["name"] or (hinfo["city_name"] and q == hinfo["city_name"]):
+            cid = _YAD2_CATALOG["cities_by_name"].get(hinfo["city_name"], "")
+            hoods.append({
+                "fullTitleText": f"{hinfo['name']}, {hinfo['city_name']}" if hinfo["city_name"] else hinfo["name"],
+                "hoodId": hid,
+                "cityId": cid,
+                "areaId": "",
+                "regionId": "",
+            })
+            if len(hoods) >= 20:
+                break
+    return {"cities": cities[:8], "hoods": hoods[:14]}
+
+
+def get_car_models(mfg_id: str) -> List[Dict[str, str]]:
+    ensure_yad2_catalog()
+    if mfg_id in _YAD2_CATALOG["models_by_mfg"]:
+        return _YAD2_CATALOG["models_by_mfg"][mfg_id]
+    data = _cffi_get_json(f"https://gw.yad2.co.il/search-options/vehicles/cars?manufacturer={mfg_id}&fields=model")
+    models = []
+    if data and isinstance(data.get("data"), dict):
+        for m in data["data"].get("model") or []:
+            mid = str(m.get("value") or "").strip()
+            mname = str(m.get("text") or "").strip()
+            if mid and mname:
+                models.append({"id": mid, "name": mname})
+    _YAD2_CATALOG["models_by_mfg"][mfg_id] = models
+    return models
+
+
+def get_vehicle_summary(api_url: str) -> str:
+    ensure_yad2_catalog()
+    mfg_id = get_url_param(api_url, "manufacturer")
+    mdl_id = get_url_param(api_url, "model")
+    mfg_name = _YAD2_CATALOG["mfg_by_id"].get(mfg_id, f"יצרן {mfg_id}" if mfg_id else "כל היצרנים")
+    mdl_name = ""
+    if mfg_id and mdl_id:
+        for m in get_car_models(mfg_id):
+            if m["id"] == mdl_id:
+                mdl_name = m["name"]
+                break
+        if not mdl_name:
+            mdl_name = f"דגם {mdl_id}"
+    return f"{mfg_name} {mdl_name}".strip()
+
+
+def format_location_summary(api_url: str) -> str:
+    """Return a friendly Hebrew description of the City & Neighborhoods configured in api_url."""
+    city_id = get_url_param(api_url, "city")
+    city_name = get_city_name(city_id) if city_id else ""
+    hood_ids = get_selected_hood_ids(api_url)
+    if hood_ids:
+        hood_labels = []
+        for hid in hood_ids:
+            hinfo = get_hood_info(hid)
+            if hinfo["city_name"] and hinfo["city_name"] != city_name:
+                hood_labels.append(f"{hinfo['name']} ({hinfo['city_name']})")
+            else:
+                hood_labels.append(hinfo["name"])
+        prefix = f"עיר: {city_name} | " if city_name else ""
+        return f"{prefix}שכונות ({len(hood_ids)}): {', '.join(hood_labels)}"
+    if city_name:
+        return f"כל העיר {city_name} (ללא הגבלת שכונות)"
+    region = get_url_param(api_url, "region")
+    region_names = {"1": "מרכז והשרון", "2": "ירושלים והסביבה", "3": "תל אביב והסביבה", "4": "צפון והעמקים", "5": "חיפה והחוף", "6": "דרום", "7": "השרון"}
+    return f"אזור: {region_names.get(region, 'כל הארץ')}"
+
+
+def format_active_apt_features(api_url: str) -> str:
+    active = []
+    for param, label in APT_FEATURE_TOGGLES:
+        if get_url_param(api_url, param) == "1":
+            active.append(label)
+    min_sqm = get_url_param(api_url, "minSquareMeter")
+    if min_sqm:
+        active.append(f"📐 {min_sqm}+ מ״ר")
+    min_fl = get_url_param(api_url, "minFloor")
+    max_fl = get_url_param(api_url, "maxFloor")
+    if min_fl or max_fl:
+        active.append(f"🏢 קומה {min_fl or '0'}–{max_fl or 'הכל'}")
+    prop_grp = get_url_param(api_url, "propertyGroup")
+    prop_id = get_url_param(api_url, "property")
+    prop_map = {"1": "דירה", "3": "דירת גן", "6": "גג/פנטהאוז", "5": "בית פרטי/קוטג׳"}
+    if prop_id in prop_map:
+        active.append(f"🏠 {prop_map[prop_id]}")
+    elif prop_grp == "apartments":
+        active.append("🏠 דירות בלבד")
+    elif prop_grp == "houses":
+        active.append("🏠 בתים פרטיים")
+    return ", ".join(active) if active else "ללא סינון מיוחד (הכל)"
+
+
+
+# ─────────────────────────────────────────────
 # TELEGRAM API & CHUNKED SENDER
 # ─────────────────────────────────────────────
 
@@ -1244,24 +1543,39 @@ def single_source_keyboard(src_key: str, src_info: dict) -> dict:
         [
             {"text": mode_text, "callback_data": f"src_mode_toggle:{src_key}"},
         ],
-        [
-            {"text": "💰 מחיר מקסימלי", "callback_data": f"price_menu:{src_key}"},
-            {"text": "💵 מחיר מינימלי", "callback_data": f"minprice_menu:{src_key}"},
-        ],
     ]
 
     if is_car:
         rows.append([
-            {"text": "📅 שנה טווח שנתונים (Year)", "callback_data": f"ask_input:{src_key}:year"},
-            {"text": "🖐 שנה מקסימום יד", "callback_data": f"ask_input:{src_key}:hand"},
+            {"text": "🚗 בחר יצרן ודגם רכב", "callback_data": f"car_mfg_menu:{src_key}"},
+        ])
+        rows.append([
+            {"text": "📅 בחר שנתונים", "callback_data": f"year_menu:{src_key}"},
+            {"text": "🖐 מקסימום יד", "callback_data": f"hand_menu:{src_key}"},
+        ])
+        rows.append([
+            {"text": "🛣 מקסימום ק״מ", "callback_data": f"km_menu:{src_key}"},
+            {"text": "💰 מחיר מקסימלי", "callback_data": f"price_menu:{src_key}"},
+        ])
+        rows.append([
+            {"text": "💵 מחיר מינימלי", "callback_data": f"minprice_menu:{src_key}"},
         ])
     else:
-        parking_on = get_url_param(api_url, "parking") == "1"
-        shelter_on = get_url_param(api_url, "shelter") == "1"
+        hood_cnt = len(get_selected_hood_ids(api_url))
+        hood_btn_txt = f"🏘 עיר ושכונות ({hood_cnt} שכונות נבחרו)" if hood_cnt else "🏘 עיר ושכונות (בחר/הוסף שכונות)"
+        rows.append([
+            {"text": hood_btn_txt, "callback_data": f"hoods_menu:{src_key}"},
+        ])
+        rows.append([
+            {"text": "💰 מחיר מקסימלי", "callback_data": f"price_menu:{src_key}"},
+            {"text": "💵 מחיר מינימלי", "callback_data": f"minprice_menu:{src_key}"},
+        ])
         rows.append([
             {"text": "🛏 מינימום חדרים", "callback_data": f"rooms_menu:{src_key}"},
-            {"text": "🛏 מקסימום חדרים", "callback_data": f"ask_input:{src_key}:maxRooms"},
+            {"text": "🛏 מקסימום חדרים", "callback_data": f"maxrooms_menu:{src_key}"},
         ])
+        parking_on = get_url_param(api_url, "parking") == "1"
+        shelter_on = get_url_param(api_url, "shelter") == "1"
         rows.append([
             {
                 "text": f"🅿️ חניה: {'✅ חובה' if parking_on else '❌ הכל'}",
@@ -1272,11 +1586,17 @@ def single_source_keyboard(src_key: str, src_info: dict) -> dict:
                 "callback_data": f"toggle_param:{src_key}:shelter",
             },
         ])
+        rows.append([
+            {
+                "text": "🏗 מאפיינים נוספים (מעלית, מרפסת, מ״ר, קומה, חיות...)",
+                "callback_data": f"apt_features:{src_key}",
+            }
+        ])
 
     rows.extend([
         [
             {"text": "🏷 שנה שם חיפוש", "callback_data": f"ask_input:{src_key}:label"},
-            {"text": "🔗 החלף קישור/אזור מיד 2", "callback_data": f"ask_input:{src_key}:url"},
+            {"text": "🔗 הדבק קישור מיד 2", "callback_data": f"ask_input:{src_key}:url"},
         ],
         [
             {"text": "📈 דו״ח מחיר שוק לחיפוש זה", "callback_data": f"src_market_now:{src_key}"},
@@ -1286,6 +1606,218 @@ def single_source_keyboard(src_key: str, src_info: dict) -> dict:
             {"text": "🗑 מחק חיפוש", "callback_data": f"del_confirm:{src_key}"},
             {"text": "🔙 חזרה לרשימת החיפושים", "callback_data": "manage_sources"},
         ],
+    ])
+    return {"inline_keyboard": rows}
+
+
+def hoods_menu_keyboard(src_key: str, src_info: dict) -> dict:
+    """Interactive menu for managing City & Neighborhoods of a Real Estate search."""
+    ensure_yad2_catalog()
+    api_url = src_info.get("api_url", "")
+    city_id = get_url_param(api_url, "city")
+    city_name = get_city_name(city_id) if city_id else ""
+    hood_ids = get_selected_hood_ids(api_url)
+
+    rows = []
+    # 1. Show currently selected neighborhoods with 1-click remove buttons
+    for hid in hood_ids:
+        hinfo = get_hood_info(hid)
+        c_suffix = f" ({hinfo['city_name']})" if hinfo["city_name"] else ""
+        rows.append([
+            {
+                "text": f"✅ שכונה פעילה: {hinfo['name']}{c_suffix} — לחץ להסרה ❌",
+                "callback_data": f"hood_rm:{src_key}:{hid}",
+            }
+        ])
+
+    # 2. Identify cities whose neighborhood checklists we can open immediately
+    candidate_cities: List[Tuple[str, str]] = []  # (city_id, city_name)
+    if city_id and city_name:
+        candidate_cities.append((city_id, city_name))
+    for hid in hood_ids:
+        hinfo = get_hood_info(hid)
+        cname = hinfo.get("city_name", "")
+        cid = _YAD2_CATALOG["cities_by_name"].get(cname, "")
+        if cid and cname and (cid, cname) not in candidate_cities:
+            candidate_cities.append((cid, cname))
+
+    for cid, cname in candidate_cities[:4]:
+        rows.append([
+            {
+                "text": f"📋 בחר/סמן שכונות מתוך {cname} (רשימה מלאה)",
+                "callback_data": f"city_hoods:{src_key}:{cid}:0",
+            }
+        ])
+
+    # 3. Search any city or neighborhood by typing in Hebrew + Quick Popular Cities
+    rows.append([
+        {"text": "🔍 חפש עיר או שכונה בהקלדה (בעברית)", "callback_data": f"ask_input:{src_key}:search_loc"},
+    ])
+    rows.append([
+        {"text": "🏙 בחר עיר מרשימת ערים פופולריות", "callback_data": f"pop_cities:{src_key}"},
+    ])
+    if hood_ids:
+        rows.append([
+            {"text": "🌐 חפש בכל העיר/האזור (נקה סינון שכונות)", "callback_data": f"hood_clear:{src_key}"},
+        ])
+    rows.append([
+        {"text": f"🔙 חזרה להגדרות חיפוש [{src_key}]", "callback_data": f"src_view:{src_key}"},
+    ])
+    return {"inline_keyboard": rows}
+
+
+def city_hoods_checklist_keyboard(src_key: str, src_info: dict, city_id: str, page: int = 0) -> dict:
+    """Paginated 2-column interactive checklist of all neighborhoods in `city_id`."""
+    api_url = src_info.get("api_url", "")
+    selected = set(get_selected_hood_ids(api_url))
+    all_hoods = get_city_neighborhoods(city_id)
+    page_size = 14
+    total = len(all_hoods)
+    max_page = max(0, (total - 1) // page_size) if total else 0
+    page = max(0, min(page, max_page))
+    slice_hoods = all_hoods[page * page_size : (page + 1) * page_size]
+
+    rows = []
+    for i in range(0, len(slice_hoods), 2):
+        pair = slice_hoods[i : i + 2]
+        row = []
+        for h in pair:
+            hid = h["id"]
+            mark = "✅" if hid in selected else "⬜"
+            row.append({
+                "text": f"{mark} {h['name']}",
+                "callback_data": f"hood_chk:{src_key}:{city_id}:{page}:{hid}",
+            })
+        rows.append(row)
+
+    if max_page > 0:
+        nav_row = []
+        if page > 0:
+            nav_row.append({"text": "➡️ עמוד קודם", "callback_data": f"city_hoods:{src_key}:{city_id}:{page - 1}"})
+        nav_row.append({"text": f"עמוד {page + 1}/{max_page + 1}", "callback_data": f"city_hoods:{src_key}:{city_id}:{page}"})
+        if page < max_page:
+            nav_row.append({"text": "⬅️ שכונות נוספות", "callback_data": f"city_hoods:{src_key}:{city_id}:{page + 1}"})
+        rows.append(nav_row)
+
+    rows.append([
+        {"text": "🔍 חפש שכונה בהקלדה", "callback_data": f"ask_input:{src_key}:search_loc"},
+        {"text": "🌐 כל העיר (ללא שכונות)", "callback_data": f"hood_clear:{src_key}"},
+    ])
+    rows.append([
+        {"text": "✅ סיום וחזרה לתפריט שכונות", "callback_data": f"hoods_menu:{src_key}"},
+    ])
+    return {"inline_keyboard": rows}
+
+
+def popular_cities_keyboard(src_key: str) -> dict:
+    rows = []
+    for i in range(0, len(POPULAR_CITIES), 2):
+        pair = POPULAR_CITIES[i : i + 2]
+        rows.append([
+            {
+                "text": f"🏙 {c['name']}",
+                "callback_data": f"set_city:{src_key}:{c['city']}:{c['area']}:{c['region']}",
+            }
+            for c in pair
+        ])
+    rows.append([
+        {"text": "🔍 הקלד שם של כל עיר/יישוב בארץ", "callback_data": f"ask_input:{src_key}:search_loc"},
+    ])
+    rows.append([
+        {"text": "🔙 חזרה לתפריט עיר ושכונות", "callback_data": f"hoods_menu:{src_key}"},
+    ])
+    return {"inline_keyboard": rows}
+
+
+def apt_features_keyboard(src_key: str, src_info: dict) -> dict:
+    """Interactive menu for all apartment features (elevator, balcony, AC, pets, sqm, floor, type)."""
+    api_url = src_info.get("api_url", "")
+    is_forsale = "/forsale/" in api_url
+    deal_txt = "🔄 סוג עסקה: מכירה (לחץ להחלפה להשכרה)" if is_forsale else "🔄 סוג עסקה: השכרה (לחץ להחלפה למכירה)"
+
+    rows = []
+    for i in range(0, len(APT_FEATURE_TOGGLES), 2):
+        pair = APT_FEATURE_TOGGLES[i : i + 2]
+        row = []
+        for param, label in pair:
+            on = get_url_param(api_url, param) == "1"
+            row.append({
+                "text": f"{label}: {'✅' if on else '❌'}",
+                "callback_data": f"feat_tog:{src_key}:{param}",
+            })
+        rows.append(row)
+
+    min_sqm = get_url_param(api_url, "minSquareMeter") or "הכל"
+    min_fl = get_url_param(api_url, "minFloor") or "הכל"
+    rows.extend([
+        [
+            {"text": f"📐 מינימום מ״ר ({min_sqm})", "callback_data": f"sqm_menu:{src_key}"},
+            {"text": f"🏢 קומה ({min_fl})", "callback_data": f"floor_menu:{src_key}"},
+        ],
+        [
+            {"text": "🏠 סוג נכס (דירה / גן / פנטהאוז / בית פרטי)", "callback_data": f"proptype_menu:{src_key}"},
+        ],
+        [
+            {"text": deal_txt, "callback_data": f"deal_toggle:{src_key}"},
+        ],
+        [
+            {"text": f"✅ חזרה להגדרות חיפוש [{src_key}]", "callback_data": f"src_view:{src_key}"},
+        ],
+    ])
+    return {"inline_keyboard": rows}
+
+
+def car_mfg_keyboard(src_key: str) -> dict:
+    rows = []
+    for i in range(0, len(POPULAR_CAR_MFGS), 2):
+        pair = POPULAR_CAR_MFGS[i : i + 2]
+        rows.append([
+            {
+                "text": f"🚗 {m['name']}",
+                "callback_data": f"car_mfg:{src_key}:{m['id']}",
+            }
+            for m in pair
+        ])
+    rows.append([
+        {"text": "🔍 חפש יצרן רכב בהקלדה (בעברית)", "callback_data": f"ask_input:{src_key}:search_car"},
+    ])
+    rows.append([
+        {"text": f"🔙 חזרה לחיפוש [{src_key}]", "callback_data": f"src_view:{src_key}"},
+    ])
+    return {"inline_keyboard": rows}
+
+
+def car_models_keyboard(src_key: str, mfg_id: str, page: int = 0) -> dict:
+    models = get_car_models(mfg_id)
+    page_size = 14
+    total = len(models)
+    max_page = max(0, (total - 1) // page_size) if total else 0
+    page = max(0, min(page, max_page))
+    slice_models = models[page * page_size : (page + 1) * page_size]
+
+    rows = []
+    for i in range(0, len(slice_models), 2):
+        pair = slice_models[i : i + 2]
+        rows.append([
+            {
+                "text": m["name"],
+                "callback_data": f"car_mdl:{src_key}:{mfg_id}:{m['id']}",
+            }
+            for m in pair
+        ])
+    if max_page > 0:
+        nav = []
+        if page > 0:
+            nav.append({"text": "➡️ הקודם", "callback_data": f"car_mfg_p:{src_key}:{mfg_id}:{page - 1}"})
+        if page < max_page:
+            nav.append({"text": "⬅️ דגמים נוספים", "callback_data": f"car_mfg_p:{src_key}:{mfg_id}:{page + 1}"})
+        if nav:
+            rows.append(nav)
+    rows.append([
+        {"text": "🌐 כל הדגמים של יצרן זה", "callback_data": f"car_mdl:{src_key}:{mfg_id}:all"},
+    ])
+    rows.append([
+        {"text": "🔙 חזרה לבחירת יצרן", "callback_data": f"car_mfg_menu:{src_key}"},
     ])
     return {"inline_keyboard": rows}
 
@@ -1311,6 +1843,7 @@ def build_status_text(cfg: dict) -> str:
         api_url = src_info.get("api_url", "")
         max_p = get_url_param(api_url, "maxPrice") or get_url_param(api_url, "price") or "ללא הגבלה"
         min_r = get_url_param(api_url, "minRooms") or get_url_param(api_url, "year") or "הכל"
+        loc_or_car = get_vehicle_summary(api_url) if is_car else format_location_summary(api_url)
 
         st = load_state(get_state_path(src_info, src_key))
         last_check = st.get("lastCheck") or "טרם נסרק"
@@ -1319,7 +1852,6 @@ def build_status_text(cfg: dict) -> str:
         if active_cnt is None:
             active_cnt = sum(1 for l in all_l if l.get("lastSeen") == last_check) if last_check != "טרם נסרק" else len(all_l)
 
-        # Quick median price preview
         active_prices = sorted(
             l["price"] for l in all_l
             if (l.get("active") is True or l.get("lastSeen") == last_check)
@@ -1330,6 +1862,7 @@ def build_status_text(cfg: dict) -> str:
         lines.append(
             f"\n{cat_icon} <b>[{src_key}] {label}</b> — {icon}\n"
             f"  🎯 מצב: {mode_str}\n"
+            f"  📍 {'דגם' if is_car else 'מיקום'}: {html.escape(loc_or_car)}\n"
             f"  💰 תקרה: {max_p} | {'📅 שנתון' if is_car else '🛏 חדרים'}: {min_r}\n"
             f"  📊 פעילות כרגע: <b>{active_cnt}</b>{med_str}\n"
             f"  🕒 בדיקה אחרונה: <code>{last_check}</code>"
@@ -1353,8 +1886,7 @@ def build_source_detail_text(src_key: str, src_info: dict) -> str:
     max_r = get_url_param(api_url, "maxRooms") or "ללא"
     year_p = get_url_param(api_url, "year") or "הכל"
     hand_p = get_url_param(api_url, "hand") or "הכל"
-    parking = "✅ חובה" if get_url_param(api_url, "parking") == "1" else "לא חובה"
-    shelter = "✅ חובה" if get_url_param(api_url, "shelter") == "1" else "לא חובה"
+    km_p = get_url_param(api_url, "km") or "הכל"
 
     st = load_state(get_state_path(src_info, src_key))
     last_check = st.get("lastCheck") or "טרם נסרק"
@@ -1363,21 +1895,27 @@ def build_source_detail_text(src_key: str, src_info: dict) -> str:
     lines = [
         f"⚙️ <b>הגדרת חיפוש [{src_key}] — {label}</b>\n",
         f"• <b>סטטוס:</b> {icon}",
-        f"• <b>סוג:</b> {'🚗 רכב' if is_car else '🏠 נדל״ן'}",
+        f"• <b>סוג:</b> {'🚗 רכב' if is_car else ('🏠 נדל״ן למכירה' if '/forsale/' in api_url else '🏠 נדל״ן להשכרה')}",
         f"• <b>מצב פעולה:</b> {mode_str}",
-        f"• <b>מחיר מינימום–מקסימום:</b> ₪{min_p} – ₪{max_p}",
     ]
     if is_car:
-        lines.append(f"• <b>שנתונים:</b> {year_p} | <b>יד:</b> {hand_p}")
+        car_summary = html.escape(get_vehicle_summary(api_url))
+        lines.append(f"• <b>יצרן ודגם:</b> <b>{car_summary}</b>")
+        lines.append(f"• <b>מחיר מינימום–מקסימום:</b> ₪{min_p} – ₪{max_p}")
+        lines.append(f"• <b>שנתונים:</b> {year_p} | <b>יד:</b> {hand_p} | <b>ק״מ:</b> {km_p}")
     else:
-        lines.append(f"• <b>חדרים:</b> מ-{min_r} עד {max_r}")
-        lines.append(f"• <b>חניה:</b> {parking} | <b>ממ״ד:</b> {shelter}")
+        loc_summary = html.escape(format_location_summary(api_url))
+        feat_summary = html.escape(format_active_apt_features(api_url))
+        lines.append(f"• <b>📍 מיקום ושכונות:</b> <b>{loc_summary}</b>")
+        lines.append(f"• <b>💰 מחיר מינימום–מקסימום:</b> ₪{min_p} – ₪{max_p}")
+        lines.append(f"• <b>🛏 חדרים:</b> מ-{min_r} עד {max_r}")
+        lines.append(f"• <b>🏗 מאפיינים:</b> {feat_summary}")
 
-    lines.append(f"• <b>מודעות פעילות כרגע:</b> {active_cnt} (בדיקה אחרונה: <code>{last_check}</code>)")
+    lines.append(f"• <b>📊 מודעות פעילות כרגע:</b> {active_cnt} (בדיקה אחרונה: <code>{last_check}</code>)")
     if web_url:
         lines.append(f'• 🔗 <a href="{html.escape(web_url)}">קישור לחיפוש ביד 2</a>')
 
-    lines.append("\n👇 <b>לחץ על כל אחד מהכפתורים למטה כדי לשנות את ההגדרות מיד:</b>")
+    lines.append("\n👇 <b>לחץ על הכפתורים למטה כדי לבחור עיר, שכונות, מחיר או מאפיינים בקליק:</b>")
     return "\n".join(lines)
 
 
@@ -1445,10 +1983,45 @@ def create_new_source_from_url(cfg: dict, url_part: str, label_part: str = "", m
         )
 
 
+def create_blank_source(cfg: dict, category: str = "realestate", mode: str = "alert") -> str:
+    """Create a new source immediately so the user can configure it via buttons without needing a URL!"""
+    existing_keys = set(cfg.get("sources", {}).keys())
+    next_key = "C"
+    for ch in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+        if ch not in existing_keys:
+            next_key = ch
+            break
+    else:
+        next_key = f"S{len(existing_keys) + 1}"
+
+    if category == "vehicles":
+        url = "https://www.yad2.co.il/vehicles/cars"
+        api_url = "https://gw.yad2.co.il/vehicles-feed/cars"
+        label = f"רכב {next_key}"
+    else:
+        url = "https://www.yad2.co.il/realestate/rent/tel-aviv-area?city=6600&area=11"
+        api_url = "https://gw.yad2.co.il/realestate-feed/rent/map?region=3&area=11&city=6600"
+        label = f"נדל״ן {next_key}"
+
+    cfg["sources"][next_key] = {
+        "enabled": True,
+        "category": category,
+        "mode": mode,
+        "label": label,
+        "url": url,
+        "api_url": api_url,
+        "state_file": f"state_{next_key.lower()}.json",
+    }
+    cfg["awaiting_input"] = None
+    save_config(cfg)
+    git_sync_state(f"config: create {mode} {category} source {next_key}")
+    return next_key
+
+
 def handle_conversational_input(cfg: dict, text: str) -> bool:
     """
-    If the bot is waiting for user text input (e.g. after clicking 'שנה שם',
-    'הקלד מחיר', 'החלף קישור', or 'הוסף מדד מחיר לרכב'), process it immediately!
+    If the bot is waiting for user text input (e.g. searching a city/neighborhood in Hebrew,
+    searching a car manufacturer, typing a price, or pasting a URL), process it immediately!
     """
     awaiting = cfg.get("awaiting_input")
     if not awaiting or not isinstance(awaiting, dict):
@@ -1471,10 +2044,11 @@ def handle_conversational_input(cfg: dict, text: str) -> bool:
         else:
             lbl, url_p = "", text_clean
         if not url_p.startswith("http"):
-            send_telegram(
-                "⚠️ אנא שלח קישור תקין מאתר יד 2 שמתחיל ב-<code>https://www.yad2.co.il/...</code> (או שלח /cancel לביטול)."
-            )
-            return True
+            # If user typed a Hebrew city/neighborhood instead of a URL, create a source and search location!
+            new_key = create_blank_source(cfg, category="realestate", mode=mode)
+            cfg["awaiting_input"] = {"action": "search_loc", "src_key": new_key}
+            save_config(cfg)
+            return handle_conversational_input(cfg, text_clean)
         send_telegram("⏳ <b>מתחבר ל-API של יד 2 ומנתח את המודעות…</b>")
         new_key, reply = create_new_source_from_url(cfg, url_p, lbl, mode=mode)
         src_info = cfg["sources"].get(new_key, {})
@@ -1487,6 +2061,86 @@ def handle_conversational_input(cfg: dict, text: str) -> bool:
         save_config(cfg)
         return False
 
+    if action == "search_loc":
+        cfg["awaiting_input"] = None
+        save_config(cfg)
+        matches = search_yad2_locations(text_clean)
+        cities = matches.get("cities", [])
+        hoods = matches.get("hoods", [])
+        if not cities and not hoods:
+            send_telegram(
+                f"⚠️ לא נמצאו ערים או שכונות עבור <b>{html.escape(text_clean)}</b>.\nנסה להקליד שם עיר או שכונה אחרת:",
+                reply_markup=hoods_menu_keyboard(src_key, src_info),
+            )
+            return True
+
+        kb_rows = []
+        for c in cities[:5]:
+            cid = str(c.get("cityId") or "")
+            aid = str(c.get("areaId") or "1")
+            rid = str(c.get("regionId") or "3")
+            title = c.get("fullTitleText") or cid
+            kb_rows.append([
+                {
+                    "text": f"🏙 קבע עיר: {title} (ובחר שכונות)",
+                    "callback_data": f"set_city:{src_key}:{cid}:{aid}:{rid}",
+                }
+            ])
+        for h in hoods[:10]:
+            hid = str(h.get("hoodId") or "")
+            cid = str(h.get("cityId") or "")
+            aid = str(h.get("areaId") or "")
+            rid = str(h.get("regionId") or "")
+            title = h.get("fullTitleText") or hid
+            kb_rows.append([
+                {
+                    "text": f"➕ הוסף שכונה: {title}",
+                    "callback_data": f"hood_add:{src_key}:{hid}:{cid}:{aid}:{rid}",
+                },
+                {
+                    "text": f"🎯 רק שכונה זו",
+                    "callback_data": f"hood_only:{src_key}:{hid}:{cid}:{aid}:{rid}",
+                },
+            ])
+        kb_rows.append([
+            {"text": "🔍 חפש שם אחר", "callback_data": f"ask_input:{src_key}:search_loc"},
+            {"text": "🔙 חזרה לתפריט שכונות", "callback_data": f"hoods_menu:{src_key}"},
+        ])
+        send_telegram(
+            f"🔎 <b>תוצאות חיפוש ביד 2 עבור \"{html.escape(text_clean)}\":</b>\n"
+            "• לחץ על <b>➕ הוסף שכונה</b> כדי לצרף אותה לרשימת השכונות בחיפוש.\n"
+            "• לחץ על <b>🎯 רק שכונה זו</b> כדי לחפש רק בה.\n"
+            "• לחץ על <b>🏙 קבע עיר</b> כדי לעבור לעיר ולסמן שכונות מתוך רשימה מלאה:",
+            reply_markup={"inline_keyboard": kb_rows},
+        )
+        return True
+
+    if action == "search_car":
+        cfg["awaiting_input"] = None
+        save_config(cfg)
+        ensure_yad2_catalog()
+        matching_mfgs = [
+            (mid, mname)
+            for mid, mname in _YAD2_CATALOG["mfg_by_id"].items()
+            if text_clean.lower() in mname.lower()
+        ]
+        if not matching_mfgs:
+            send_telegram(
+                f"⚠️ לא נמצא יצרן רכב בשם <b>{html.escape(text_clean)}</b>. בחר מהרשימה או נסה שוב:",
+                reply_markup=car_mfg_keyboard(src_key),
+            )
+            return True
+        kb_rows = [
+            [{"text": f"🚗 {mname}", "callback_data": f"car_mfg:{src_key}:{mid}"}]
+            for mid, mname in matching_mfgs[:12]
+        ]
+        kb_rows.append([{"text": "🔙 חזרה לבחירת יצרן", "callback_data": f"car_mfg_menu:{src_key}"}])
+        send_telegram(
+            f"🔎 <b>בחר יצרן רכב מתוך התוצאות עבור \"{html.escape(text_clean)}\":</b>",
+            reply_markup={"inline_keyboard": kb_rows},
+        )
+        return True
+
     if action == "label":
         src_info["label"] = text_clean[:60]
     elif action == "url":
@@ -1496,8 +2150,10 @@ def handle_conversational_input(cfg: dict, text: str) -> bool:
         src_info["url"] = text_clean
         src_info["api_url"] = yad2_web_url_to_api_url(text_clean)
         src_info["category"] = detect_url_category(text_clean)
-    elif action in ("maxPrice", "minPrice", "minRooms", "maxRooms", "year", "hand"):
+    elif action in ("maxPrice", "minPrice", "minRooms", "maxRooms", "year", "hand", "minSquareMeter", "minFloor", "maxFloor", "km"):
         val = "" if text_clean in ("0", "ללא", "הכל", "none") else text_clean.replace(",", "").replace("₪", "").strip()
+        if action == "km" and val and "-" not in val:
+            val = f"-1-{val}"
         src_info["api_url"] = update_url_param(src_info.get("api_url", ""), action, val)
         src_info["url"] = update_url_param(src_info.get("url", ""), action, val)
 
@@ -1654,16 +2310,39 @@ def process_telegram_updates(listen_seconds: int = 0, scan_interval_minutes: int
                 elif data == "add_wizard":
                     answer_callback(cb_id)
                     edit_or_send_telegram(
-                        "➕ <b>הוספת חיפוש או מדד מחיר חדש</b>\nבחר מה ברצונך להוסיף:",
+                        "➕ <b>הוספת חיפוש או מדד מחיר חדש — בקלות וללא צורך בקישור!</b>\n"
+                        "בחר מה ברצונך להוסיף (תוכל לבחור עיר, שכונות או דגם רכב ישירות מכפתורים):",
                         msg_id,
                         {
                             "inline_keyboard": [
-                                [{"text": "🔔 התרעות על דירות/רכבים חדשים (קונה/שוכר)", "callback_data": "add_alert_prompt"}],
-                                [{"text": "🚗 מדד מחיר שוק למכירת הרכב שלי", "callback_data": "add_market_car"}],
-                                [{"text": "🏠 מדד מחיר שוק להשכרת/מכירת הדירה שלי", "callback_data": "add_market_apt"}],
+                                [{"text": "🏠 חיפוש דירה חדש (בחירת עיר ושכונות בכפתורים)", "callback_data": "new_apt_alert"}],
+                                [{"text": "📈 מדד מחיר שוק לדירה שלי (בחירת עיר ושכונות)", "callback_data": "new_apt_market"}],
+                                [{"text": "🚗 מדד מחיר שוק / חיפוש רכב (בחירת יצרן ודגם)", "callback_data": "new_car_market"}],
+                                [{"text": "🔗 הוספה מהירה באמצעות הדבקת קישור מיד 2", "callback_data": "add_alert_prompt"}],
                                 [{"text": "🔙 חזרה לתפריט הראשי", "callback_data": "main_menu"}],
                             ]
                         },
+                    )
+
+                elif data in ("new_apt_alert", "new_apt_market", "add_market_apt"):
+                    mode = "alert" if data == "new_apt_alert" else "market"
+                    new_key = create_blank_source(cfg, category="realestate", mode=mode)
+                    src_info = cfg["sources"][new_key]
+                    answer_callback(cb_id, f"חיפוש [{new_key}] נוצר! בחר עיר ושכונות")
+                    edit_or_send_telegram(
+                        f"🏘 <b>חיפוש חדש [{new_key}] נוצר! עכשיו בחר עיר ושכונות:</b>\n"
+                        "• לחץ על <b>🏙 בחר עיר מרשימת ערים פופולריות</b> או <b>🔍 חפש עיר/שכונה בהקלדה</b>:",
+                        msg_id,
+                        popular_cities_keyboard(new_key),
+                    )
+
+                elif data in ("new_car_market", "add_market_car"):
+                    new_key = create_blank_source(cfg, category="vehicles", mode="market")
+                    answer_callback(cb_id, f"מעקב רכב [{new_key}] נוצר! בחר יצרן")
+                    edit_or_send_telegram(
+                        f"🚗 <b>מעקב מחיר רכב [{new_key}] נוצר! בחר את יצרן הרכב:</b>",
+                        msg_id,
+                        car_mfg_keyboard(new_key),
                     )
 
                 elif data == "add_alert_prompt":
@@ -1671,34 +2350,403 @@ def process_telegram_updates(listen_seconds: int = 0, scan_interval_minutes: int
                     save_config(cfg)
                     answer_callback(cb_id)
                     send_telegram(
-                        "🔔 <b>הוספת חיפוש התרעות חדש</b>\n\n"
-                        "חפש באתר יד 2 (דירות או רכבים) עם הפילטרים שאתה רוצה, העתק את הקישור משורת הכתובת בדפדפן, ושלח לי אותו כאן:\n"
-                        "<code>שם החיפוש | https://www.yad2.co.il/...</code>\n"
-                        "(או שלח רק את הקישור עצמו! לביטול שלח /cancel)"
+                        "🔔 <b>הוספת חיפוש חדש (קישור או שם עיר/שכונה)</b>\n\n"
+                        "שלח כאן קישור מאתר יד 2 <b>או פשוט הקלד שם עיר/שכונה בעברית</b> (למשל: <code>חולון</code> או <code>אגרובנק</code>):\n"
+                        "<i>(לביטול שלח /cancel)</i>"
                     )
 
-                elif data == "add_market_car":
-                    cfg["awaiting_input"] = {"action": "add_market"}
-                    save_config(cfg)
+                elif data.startswith("hoods_menu:"):
+                    src_key = data.split(":", 1)[1]
+                    src_info = cfg.get("sources", {}).get(src_key)
+                    if src_info:
+                        loc_txt = html.escape(format_location_summary(src_info.get("api_url", "")))
+                        answer_callback(cb_id)
+                        edit_or_send_telegram(
+                            f"🏘 <b>ניהול עיר ושכונות — חיפוש [{src_key}]</b>\n\n"
+                            f"📍 <b>מוגדר כרגע:</b> {loc_txt}\n\n"
+                            "• לחץ על שכונה פעילה (✅) כדי להסיר אותה.\n"
+                            "• לחץ על <b>📋 בחר/סמן שכונות מתוך העיר</b> כדי לסמן כמה שכונות שתרצה מתוך רשימה.\n"
+                            "• או לחץ על <b>🔍 חפש עיר או שכונה בהקלדה</b> כדי להוסיף כל שכונה או עיר בארץ:",
+                            msg_id,
+                            hoods_menu_keyboard(src_key, src_info),
+                        )
+
+                elif data.startswith("city_hoods:"):
+                    _, src_key, city_id, page_str = data.split(":", 3)
+                    src_info = cfg.get("sources", {}).get(src_key)
+                    if src_info:
+                        cname = html.escape(get_city_name(city_id))
+                        selected_cnt = len(get_selected_hood_ids(src_info.get("api_url", "")))
+                        answer_callback(cb_id)
+                        edit_or_send_telegram(
+                            f"📋 <b>בחירת שכונות ב{cname} — חיפוש [{src_key}]</b>\n"
+                            f"שכונות מסומנות כרגע בחיפוש: <b>{selected_cnt}</b>\n"
+                            "לחץ על כל שכונה כדי להוסיף (✅) או להסיר (⬜) אותה מהחיפוש:",
+                            msg_id,
+                            city_hoods_checklist_keyboard(src_key, src_info, city_id, int(page_str)),
+                        )
+
+                elif data.startswith("hood_chk:"):
+                    _, src_key, city_id, page_str, hood_id = data.split(":", 4)
+                    src_info = cfg.get("sources", {}).get(src_key)
+                    if src_info:
+                        cur_hoods = get_selected_hood_ids(src_info.get("api_url", ""))
+                        if hood_id in cur_hoods:
+                            cur_hoods.remove(hood_id)
+                            act_msg = "שכונה הוסרה ⬜"
+                        else:
+                            cur_hoods.append(hood_id)
+                            act_msg = "שכונה נוספה ✅"
+                        src_info["api_url"] = set_selected_hood_ids(src_info.get("api_url", ""), cur_hoods)
+                        src_info["url"] = set_selected_hood_ids(src_info.get("url", ""), cur_hoods)
+                        save_config(cfg)
+                        git_sync_state(f"config: {src_key} toggle hood {hood_id}")
+                        cname = html.escape(get_city_name(city_id))
+                        answer_callback(cb_id, act_msg)
+                        edit_or_send_telegram(
+                            f"📋 <b>בחירת שכונות ב{cname} — חיפוש [{src_key}]</b>\n"
+                            f"📍 <b>מוגדר כרגע:</b> {html.escape(format_location_summary(src_info['api_url']))}\n"
+                            "לחץ על כל שכונה כדי להוסיף (✅) או להסיר (⬜) אותה:",
+                            msg_id,
+                            city_hoods_checklist_keyboard(src_key, src_info, city_id, int(page_str)),
+                        )
+
+                elif data.startswith("hood_rm:"):
+                    _, src_key, hood_id = data.split(":", 2)
+                    src_info = cfg.get("sources", {}).get(src_key)
+                    if src_info:
+                        cur_hoods = [h for h in get_selected_hood_ids(src_info.get("api_url", "")) if h != hood_id]
+                        src_info["api_url"] = set_selected_hood_ids(src_info.get("api_url", ""), cur_hoods)
+                        src_info["url"] = set_selected_hood_ids(src_info.get("url", ""), cur_hoods)
+                        save_config(cfg)
+                        git_sync_state(f"config: {src_key} remove hood {hood_id}")
+                        answer_callback(cb_id, "השכונה הוסרה ✓")
+                        edit_or_send_telegram(
+                            f"🏘 <b>ניהול עיר ושכונות — חיפוש [{src_key}]</b>\n\n"
+                            f"📍 <b>מוגדר כרגע:</b> {html.escape(format_location_summary(src_info['api_url']))}",
+                            msg_id,
+                            hoods_menu_keyboard(src_key, src_info),
+                        )
+
+                elif data.startswith("hood_clear:"):
+                    src_key = data.split(":", 1)[1]
+                    src_info = cfg.get("sources", {}).get(src_key)
+                    if src_info:
+                        src_info["api_url"] = set_selected_hood_ids(src_info.get("api_url", ""), [])
+                        src_info["url"] = set_selected_hood_ids(src_info.get("url", ""), [])
+                        save_config(cfg)
+                        git_sync_state(f"config: {src_key} clear neighborhoods")
+                        answer_callback(cb_id, "סינון שכונות נוקה (כל העיר)")
+                        edit_or_send_telegram(
+                            f"🏘 <b>ניהול עיר ושכונות — חיפוש [{src_key}]</b>\n\n"
+                            f"📍 <b>מוגדר כרגע:</b> {html.escape(format_location_summary(src_info['api_url']))}",
+                            msg_id,
+                            hoods_menu_keyboard(src_key, src_info),
+                        )
+
+                elif data.startswith("pop_cities:"):
+                    src_key = data.split(":", 1)[1]
                     answer_callback(cb_id)
-                    send_telegram(
-                        "🚗 <b>הוספת מדד מחיר שוק למכירת הרכב שלך</b>\n\n"
-                        "1. היכנס ליד 2 ← רכב, ובחר את <b>היצרן, הדגם והשנתון</b> של הרכב שלך.\n"
-                        "2. העתק את הקישור מהדפדפן (למשל <code>https://www.yad2.co.il/vehicles/cars?manufacturer=...</code>).\n"
-                        "3. הדבק ושלח אותו כאן בצ׳אט (למשל: <code>הרכב שלי | https://www.yad2.co.il/vehicles/cars?...</code>).\n\n"
-                        "מיד אשלוף את כל הרכבים המתחרים בלוח ואחשב לך דו״ח תמחור מלא! (לביטול שלח /cancel)"
+                    edit_or_send_telegram(
+                        f"🏙 <b>בחר עיר עבור חיפוש [{src_key}]</b> (או לחץ למטה להקלדת שם עיר אחרת):",
+                        msg_id,
+                        popular_cities_keyboard(src_key),
                     )
 
-                elif data == "add_market_apt":
-                    cfg["awaiting_input"] = {"action": "add_market"}
-                    save_config(cfg)
+                elif data.startswith("set_city:"):
+                    _, src_key, cid, aid, rid = data.split(":", 4)
+                    src_info = cfg.get("sources", {}).get(src_key)
+                    if src_info:
+                        for key_u in ("api_url", "url"):
+                            u = src_info.get(key_u, "")
+                            if rid:
+                                u = update_url_param(u, "region", rid)
+                            if aid:
+                                u = update_url_param(u, "area", aid)
+                            u = update_url_param(u, "city", cid)
+                            u = set_selected_hood_ids(u, [])
+                            src_info[key_u] = u
+                        cname = get_city_name(cid)
+                        if src_info.get("label", "").startswith(("נדל״ן ", "חיפוש ")):
+                            src_info["label"] = cname
+                        save_config(cfg)
+                        git_sync_state(f"config: {src_key} set city {cid} ({cname})")
+                        answer_callback(cb_id, f"עיר נקבעה: {cname} ✓")
+                        edit_or_send_telegram(
+                            f"✅ <b>העיר נקבעה ל-{html.escape(cname)}!</b>\n"
+                            "כעת תוכל לסמן שכונות ספציפיות מתוך העיר (או להשאיר ללא סימון כדי לחפש בכל העיר):",
+                            msg_id,
+                            city_hoods_checklist_keyboard(src_key, src_info, cid, 0),
+                        )
+
+                elif data.startswith(("hood_add:", "hood_only:")):
+                    act_type, src_key, hid, cid, aid, rid = data.split(":", 5)
+                    src_info = cfg.get("sources", {}).get(src_key)
+                    if src_info:
+                        cur_hoods = get_selected_hood_ids(src_info.get("api_url", ""))
+                        if act_type == "hood_only":
+                            new_hoods = [hid]
+                        else:
+                            new_hoods = cur_hoods + ([hid] if hid not in cur_hoods else [])
+                        for key_u in ("api_url", "url"):
+                            u = src_info.get(key_u, "")
+                            if rid:
+                                u = update_url_param(u, "region", rid)
+                            if aid:
+                                u = update_url_param(u, "area", aid)
+                            if cid and (act_type == "hood_only" or len(new_hoods) == 1):
+                                u = update_url_param(u, "city", cid)
+                            u = set_selected_hood_ids(u, new_hoods)
+                            src_info[key_u] = u
+                        hinfo = get_hood_info(hid)
+                        if src_info.get("label", "").startswith(("נדל״ן ", "חיפוש ")):
+                            src_info["label"] = f"{hinfo['name']} ({hinfo['city_name']})" if hinfo.get("city_name") else hinfo["name"]
+                        save_config(cfg)
+                        git_sync_state(f"config: {src_key} {act_type} {hid}")
+                        answer_callback(cb_id, f"שכונה עודכנה: {hinfo['name']} ✓")
+                        edit_or_send_telegram(
+                            f"✅ <b>השכונה \"{html.escape(hinfo['name'])}\" עודכנה בחיפוש [{src_key}]!</b>\n\n"
+                            f"📍 <b>מוגדר כרגע:</b> {html.escape(format_location_summary(src_info['api_url']))}",
+                            msg_id,
+                            hoods_menu_keyboard(src_key, src_info),
+                        )
+
+                elif data.startswith("apt_features:"):
+                    src_key = data.split(":", 1)[1]
+                    src_info = cfg.get("sources", {}).get(src_key)
+                    if src_info:
+                        answer_callback(cb_id)
+                        edit_or_send_telegram(
+                            f"🏗 <b>מאפייני דירה וסינונים מתקדמים — חיפוש [{src_key}]</b>\n"
+                            f"פעיל כרגע: <b>{html.escape(format_active_apt_features(src_info.get('api_url', '')))}</b>\n\n"
+                            "לחץ על כל מאפיין כדי להפעיל (✅) או לכבות (❌) אותו מיד:",
+                            msg_id,
+                            apt_features_keyboard(src_key, src_info),
+                        )
+
+                elif data.startswith("feat_tog:"):
+                    _, src_key, param_name = data.split(":", 2)
+                    src_info = cfg.get("sources", {}).get(src_key)
+                    if src_info:
+                        cur_val = get_url_param(src_info.get("api_url", ""), param_name)
+                        new_val = "" if cur_val == "1" else "1"
+                        src_info["api_url"] = update_url_param(src_info.get("api_url", ""), param_name, new_val)
+                        src_info["url"] = update_url_param(src_info.get("url", ""), param_name, new_val)
+                        save_config(cfg)
+                        git_sync_state(f"config: {src_key} {param_name}={new_val or 'off'}")
+                        answer_callback(cb_id, "מאפיין עודכן ✓")
+                        edit_or_send_telegram(
+                            f"🏗 <b>מאפייני דירה וסינונים מתקדמים — חיפוש [{src_key}]</b>\n"
+                            f"פעיל כרגע: <b>{html.escape(format_active_apt_features(src_info.get('api_url', '')))}</b>\n\n"
+                            "לחץ על כל מאפיין כדי להפעיל (✅) או לכבות (❌) אותו:",
+                            msg_id,
+                            apt_features_keyboard(src_key, src_info),
+                        )
+
+                elif data.startswith("deal_toggle:"):
+                    src_key = data.split(":", 1)[1]
+                    src_info = cfg.get("sources", {}).get(src_key)
+                    if src_info:
+                        for key_u in ("api_url", "url"):
+                            u = src_info.get(key_u, "")
+                            if "/forsale" in u:
+                                src_info[key_u] = u.replace("/forsale", "/rent")
+                            else:
+                                src_info[key_u] = u.replace("/rent", "/forsale")
+                        save_config(cfg)
+                        git_sync_state(f"config: {src_key} toggle rent/forsale")
+                        answer_callback(cb_id, "סוג עסקה הוחלף ✓")
+                        edit_or_send_telegram(
+                            f"🏗 <b>מאפייני דירה וסינונים מתקדמים — חיפוש [{src_key}]</b>",
+                            msg_id,
+                            apt_features_keyboard(src_key, src_info),
+                        )
+
+                elif data.startswith("sqm_menu:"):
+                    src_key = data.split(":", 1)[1]
+                    sqms = ["50", "65", "75", "85", "100", "120"]
+                    kb = [
+                        [{"text": f"{s}+ מ״ר", "callback_data": f"set_param:{src_key}:minSquareMeter:{s}"} for s in sqms[:3]],
+                        [{"text": f"{s}+ מ״ר", "callback_data": f"set_param:{src_key}:minSquareMeter:{s}"} for s in sqms[3:]],
+                        [
+                            {"text": "✏️ הקלד מ״ר", "callback_data": f"ask_input:{src_key}:minSquareMeter"},
+                            {"text": "♾ ללא הגבלת מ״ר", "callback_data": f"set_param:{src_key}:minSquareMeter:none"},
+                        ],
+                        [{"text": "🔙 חזרה למאפייני דירה", "callback_data": f"apt_features:{src_key}"}],
+                    ]
                     answer_callback(cb_id)
-                    send_telegram(
-                        "🏠 <b>הוספת מדד מחיר שוק להשכרת/מכירת הדירה שלך</b>\n\n"
-                        "1. היכנס ליד 2 ← נדל״ן (השכרה או מכירה), ובחר את <b>העיר, השכונה ומספר החדרים</b> של הדירה שלך.\n"
-                        "2. העתק את הקישור מהדפדפן והדבק אותו כאן בצ׳אט (למשל: <code>הדירה שלי להשכרה | https://www.yad2.co.il/realestate/rent/...</code>).\n\n"
-                        "מיד אשלוף את כל הדירות המתחרות באזור ואחשב לך מחיר שוק מומלץ לפרסום! (לביטול שלח /cancel)"
+                    edit_or_send_telegram(f"📐 <b>בחר גודל דירה מינימלי (במ״ר) עבור [{src_key}]:</b>", msg_id, {"inline_keyboard": kb})
+
+                elif data.startswith("floor_menu:"):
+                    src_key = data.split(":", 1)[1]
+                    floors = ["1", "2", "3", "4"]
+                    kb = [
+                        [{"text": f"מקומה {f}+", "callback_data": f"set_param:{src_key}:minFloor:{f}"} for f in floors],
+                        [
+                            {"text": "✏️ הקלד קומה מינימלית", "callback_data": f"ask_input:{src_key}:minFloor"},
+                            {"text": "✏️ הקלד קומה מקסימלית", "callback_data": f"ask_input:{src_key}:maxFloor"},
+                        ],
+                        [{"text": "♾ כל הקומות (בטל הגבלה)", "callback_data": f"set_param:{src_key}:minFloor:none"}],
+                        [{"text": "🔙 חזרה למאפייני דירה", "callback_data": f"apt_features:{src_key}"}],
+                    ]
+                    answer_callback(cb_id)
+                    edit_or_send_telegram(f"🏢 <b>סינון לפי קומה עבור חיפוש [{src_key}]:</b>", msg_id, {"inline_keyboard": kb})
+
+                elif data.startswith("proptype_menu:"):
+                    src_key = data.split(":", 1)[1]
+                    kb = [
+                        [
+                            {"text": "🏢 כל סוגי הדירות", "callback_data": f"set_proptype:{src_key}:group:apartments"},
+                            {"text": "🏡 בתים פרטיים / קוטג׳ים", "callback_data": f"set_proptype:{src_key}:group:houses"},
+                        ],
+                        [
+                            {"text": "🏠 דירה רגילה בלבד", "callback_data": f"set_proptype:{src_key}:prop:1"},
+                            {"text": "🌳 דירת גן בלבד", "callback_data": f"set_proptype:{src_key}:prop:3"},
+                        ],
+                        [
+                            {"text": "🌇 גג / פנטהאוז בלבד", "callback_data": f"set_proptype:{src_key}:prop:6"},
+                            {"text": "♾ הכל (ללא סינון סוג נכס)", "callback_data": f"set_proptype:{src_key}:clear:none"},
+                        ],
+                        [{"text": "🔙 חזרה למאפייני דירה", "callback_data": f"apt_features:{src_key}"}],
+                    ]
+                    answer_callback(cb_id)
+                    edit_or_send_telegram(f"🏠 <b>בחר סוג נכס עבור חיפוש [{src_key}]:</b>", msg_id, {"inline_keyboard": kb})
+
+                elif data.startswith("set_proptype:"):
+                    _, src_key, kind, val = data.split(":", 3)
+                    src_info = cfg.get("sources", {}).get(src_key)
+                    if src_info:
+                        for key_u in ("api_url", "url"):
+                            u = update_url_param(src_info.get(key_u, ""), "propertyGroup", None)
+                            u = update_url_param(u, "property", None)
+                            if kind == "group":
+                                u = update_url_param(u, "propertyGroup", val)
+                            elif kind == "prop":
+                                u = update_url_param(u, "property", val)
+                            src_info[key_u] = u
+                        save_config(cfg)
+                        git_sync_state(f"config: {src_key} proptype {kind}={val}")
+                        answer_callback(cb_id, "סוג נכס עודכן ✓")
+                        edit_or_send_telegram(
+                            f"🏗 <b>מאפייני דירה — חיפוש [{src_key}]</b>\nפעיל כרגע: <b>{html.escape(format_active_apt_features(src_info['api_url']))}</b>",
+                            msg_id,
+                            apt_features_keyboard(src_key, src_info),
+                        )
+
+                elif data.startswith("maxrooms_menu:"):
+                    src_key = data.split(":", 1)[1]
+                    rooms_opts = ["3", "3.5", "4", "4.5", "5", "6"]
+                    kb = [
+                        [{"text": f"עד {r} חד׳", "callback_data": f"set_param:{src_key}:maxRooms:{r}"} for r in rooms_opts[:3]],
+                        [{"text": f"עד {r} חד׳", "callback_data": f"set_param:{src_key}:maxRooms:{r}"} for r in rooms_opts[3:]],
+                        [
+                            {"text": "✏️ הקלד מקסימום חדרים", "callback_data": f"ask_input:{src_key}:maxRooms"},
+                            {"text": "♾ ללא הגבלה", "callback_data": f"set_param:{src_key}:maxRooms:none"},
+                        ],
+                        [{"text": f"🔙 חזרה לחיפוש {src_key}", "callback_data": f"src_view:{src_key}"}],
+                    ]
+                    answer_callback(cb_id)
+                    edit_or_send_telegram(f"🛏 <b>בחר מקסימום חדרים עבור חיפוש [{src_key}]:</b>", msg_id, {"inline_keyboard": kb})
+
+                elif data.startswith("car_mfg_menu:"):
+                    src_key = data.split(":", 1)[1]
+                    answer_callback(cb_id)
+                    edit_or_send_telegram(
+                        f"🚗 <b>בחר יצרן רכב עבור [{src_key}]:</b>",
+                        msg_id,
+                        car_mfg_keyboard(src_key),
                     )
+
+                elif data.startswith("car_mfg:"):
+                    _, src_key, mfg_id = data.split(":", 2)
+                    ensure_yad2_catalog()
+                    mfg_name = _YAD2_CATALOG["mfg_by_id"].get(mfg_id, mfg_id)
+                    answer_callback(cb_id)
+                    edit_or_send_telegram(
+                        f"🚗 <b>יצרן: {html.escape(mfg_name)} — כעת בחר דגם עבור [{src_key}]:</b>",
+                        msg_id,
+                        car_models_keyboard(src_key, mfg_id, 0),
+                    )
+
+                elif data.startswith("car_mfg_p:"):
+                    _, src_key, mfg_id, page_str = data.split(":", 3)
+                    ensure_yad2_catalog()
+                    mfg_name = _YAD2_CATALOG["mfg_by_id"].get(mfg_id, mfg_id)
+                    answer_callback(cb_id)
+                    edit_or_send_telegram(
+                        f"🚗 <b>יצרן: {html.escape(mfg_name)} — בחר דגם (עמוד {int(page_str)+1}):</b>",
+                        msg_id,
+                        car_models_keyboard(src_key, mfg_id, int(page_str)),
+                    )
+
+                elif data.startswith("car_mdl:"):
+                    _, src_key, mfg_id, mdl_id = data.split(":", 3)
+                    src_info = cfg.get("sources", {}).get(src_key)
+                    if src_info:
+                        src_info["category"] = "vehicles"
+                        for key_u in ("api_url", "url"):
+                            u = src_info.get(key_u, "")
+                            if "vehicles" not in u:
+                                u = "https://gw.yad2.co.il/vehicles-feed/cars" if key_u == "api_url" else "https://www.yad2.co.il/vehicles/cars"
+                            u = update_url_param(u, "manufacturer", mfg_id)
+                            u = update_url_param(u, "model", None if mdl_id == "all" else mdl_id)
+                            src_info[key_u] = u
+                        car_name = get_vehicle_summary(src_info["api_url"])
+                        src_info["label"] = car_name
+                        save_config(cfg)
+                        git_sync_state(f"config: {src_key} car {car_name}")
+                        answer_callback(cb_id, f"נבחר: {car_name} ✓")
+                        edit_or_send_telegram(
+                            f"✅ <b>הרכב נקבע ל-{html.escape(car_name)}!</b>\n\n" + build_source_detail_text(src_key, src_info),
+                            msg_id,
+                            single_source_keyboard(src_key, src_info),
+                        )
+
+                elif data.startswith("year_menu:"):
+                    src_key = data.split(":", 1)[1]
+                    yr_opts = ["2017-2025", "2019-2025", "2020-2025", "2021-2025", "2022-2025", "2023-2026"]
+                    kb = [
+                        [{"text": y, "callback_data": f"set_param:{src_key}:year:{y}"} for y in yr_opts[:3]],
+                        [{"text": y, "callback_data": f"set_param:{src_key}:year:{y}"} for y in yr_opts[3:]],
+                        [
+                            {"text": "✏️ הקלד טווח שנתונים (למשל 2020-2022)", "callback_data": f"ask_input:{src_key}:year"},
+                            {"text": "♾ כל השנתונים", "callback_data": f"set_param:{src_key}:year:none"},
+                        ],
+                        [{"text": f"🔙 חזרה לחיפוש {src_key}", "callback_data": f"src_view:{src_key}"}],
+                    ]
+                    answer_callback(cb_id)
+                    edit_or_send_telegram(f"📅 <b>בחר טווח שנתונים עבור רכב [{src_key}]:</b>", msg_id, {"inline_keyboard": kb})
+
+                elif data.startswith("hand_menu:"):
+                    src_key = data.split(":", 1)[1]
+                    kb = [
+                        [
+                            {"text": "🖐 יד 1 בלבד", "callback_data": f"set_param:{src_key}:hand:0-1"},
+                            {"text": "🖐 עד יד 2", "callback_data": f"set_param:{src_key}:hand:0-2"},
+                        ],
+                        [
+                            {"text": "🖐 עד יד 3", "callback_data": f"set_param:{src_key}:hand:0-3"},
+                            {"text": "♾ כל יד (ללא הגבלה)", "callback_data": f"set_param:{src_key}:hand:none"},
+                        ],
+                        [{"text": f"🔙 חזרה לחיפוש {src_key}", "callback_data": f"src_view:{src_key}"}],
+                    ]
+                    answer_callback(cb_id)
+                    edit_or_send_telegram(f"🖐 <b>בחר מקסימום יד עבור רכב [{src_key}]:</b>", msg_id, {"inline_keyboard": kb})
+
+                elif data.startswith("km_menu:"):
+                    src_key = data.split(":", 1)[1]
+                    kms = [("50,000", "-1-50000"), ("80,000", "-1-80000"), ("100,000", "-1-100000"), ("120,000", "-1-120000"), ("150,000", "-1-150000")]
+                    kb = [
+                        [{"text": f"עד {lbl} ק״מ", "callback_data": f"set_param:{src_key}:km:{val}"} for lbl, val in kms[:3]],
+                        [{"text": f"עד {lbl} ק״מ", "callback_data": f"set_param:{src_key}:km:{val}"} for lbl, val in kms[3:]],
+                        [
+                            {"text": "✏️ הקלד מקסימום ק״מ", "callback_data": f"ask_input:{src_key}:km"},
+                            {"text": "♾ ללא הגבלת ק״מ", "callback_data": f"set_param:{src_key}:km:none"},
+                        ],
+                        [{"text": f"🔙 חזרה לחיפוש {src_key}", "callback_data": f"src_view:{src_key}"}],
+                    ]
+                    answer_callback(cb_id)
+                    edit_or_send_telegram(f"🛣 <b>בחר מקסימום קילומטראז׳ עבור רכב [{src_key}]:</b>", msg_id, {"inline_keyboard": kb})
 
                 elif data.startswith("src_view:"):
                     src_key = data.split(":", 1)[1]
@@ -1870,12 +2918,18 @@ def process_telegram_updates(listen_seconds: int = 0, scan_interval_minutes: int
                     cfg["awaiting_input"] = {"action": field_name, "src_key": src_key}
                     save_config(cfg)
                     prompts = {
+                        "search_loc": f"🔍 הקלד עכשיו את <b>שם העיר או השכונה בעברית</b> עבור חיפוש [{src_key}] (למשל: <code>חולון</code>, <code>אגרובנק</code>, <code>נאות רחל</code>, <code>ראשון לציון</code>, <code>רמת אביב</code>):",
+                        "search_car": f"🚗 הקלד עכשיו את <b>שם יצרן הרכב בעברית</b> עבור [{src_key}] (למשל: <code>מאזדה</code>, <code>טויוטה</code>, <code>יונדאי</code>, <code>מיני</code>):",
                         "maxPrice": f"💰 שלח עכשיו את <b>המחיר המקסימלי</b> עבור חיפוש [{src_key}] (למשל <code>10500</code>, או <code>0</code> לביטול הגבלה):",
                         "minPrice": f"💵 שלח עכשיו את <b>המחיר המינימלי</b> עבור חיפוש [{src_key}] (למשל <code>7000</code>, או <code>0</code> לביטול הגבלה):",
                         "minRooms": f"🛏 שלח עכשיו את <b>מינימום החדרים</b> עבור חיפוש [{src_key}] (למשל <code>3.5</code> או <code>4</code>):",
                         "maxRooms": f"🛏 שלח עכשיו את <b>מקסימום החדרים</b> עבור חיפוש [{src_key}] (למשל <code>5</code>, או <code>0</code> ללא הגבלה):",
+                        "minSquareMeter": f"📐 שלח עכשיו את <b>הגודל המינימלי במ״ר</b> עבור חיפוש [{src_key}] (למשל <code>85</code>, או <code>0</code> לביטול הגבלה):",
+                        "minFloor": f"🏢 שלח עכשיו את <b>הקומה המינימלית</b> עבור חיפוש [{src_key}] (למשל <code>2</code>, או <code>0</code> לביטול הגבלה):",
+                        "maxFloor": f"🏢 שלח עכשיו את <b>הקומה המקסימלית</b> עבור חיפוש [{src_key}] (למשל <code>6</code>, או <code>0</code> לביטול הגבלה):",
                         "year": f"📅 שלח עכשיו את <b>טווח השנתונים</b> עבור רכב [{src_key}] (למשל <code>2019-2022</code> או <code>2021-2021</code>):",
                         "hand": f"🖐 שלח עכשיו את <b>טווח היד</b> עבור רכב [{src_key}] (למשל <code>1-2</code> ליד ראשונה-שנייה, או <code>0</code> להכל):",
+                        "km": f"🛣 שלח עכשיו את <b>הקילומטראז׳ המקסימלי</b> עבור רכב [{src_key}] (למשל <code>90000</code>, או <code>0</code> ללא הגבלה):",
                         "label": f"🏷 שלח עכשיו את <b>השם החדש</b> עבור חיפוש [{src_key}]:",
                         "url": f"🔗 שלח עכשיו את <b>הקישור החדש מאתר יד 2</b> עבור חיפוש [{src_key}]:",
                     }
@@ -2063,8 +3117,8 @@ def main():
     process_telegram_updates(listen_seconds=0)
 
     cfg = load_config()
-    if args.send_menu or not cfg.get("welcome_menu_v2_sent"):
-        cfg["welcome_menu_v2_sent"] = True
+    if args.send_menu or not cfg.get("welcome_menu_v3_sent"):
+        cfg["welcome_menu_v3_sent"] = True
         save_config(cfg)
         send_telegram(build_status_text(cfg), reply_markup=main_menu_keyboard(cfg))
 
