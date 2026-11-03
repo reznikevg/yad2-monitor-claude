@@ -18,5 +18,6 @@
       "api_url": "https://gw.yad2.co.il/realestate-feed/rent/map?region=1&multiNeighborhood=470,991420,991421,20436&maxPrice=10000&minRooms=4",
       "state_file": "state_center_sharon.json"
     }
-  }
+  },
+  "welcome_menu_sent": true
 }
