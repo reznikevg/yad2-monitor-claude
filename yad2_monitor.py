@@ -63,7 +63,11 @@ CONFIG_FILE = STATE_DIR / "config.json"
 FAILED_ALERTS_FILE = STATE_DIR / "failed_alerts.txt"
 LOG_FILE = STATE_DIR / "monitor.log"
 
-IST = timezone(timedelta(hours=3))
+try:
+    from zoneinfo import ZoneInfo
+    IST = ZoneInfo("Asia/Jerusalem")  # handles winter (UTC+2) / summer (UTC+3) automatically
+except Exception:
+    IST = timezone(timedelta(hours=2))
 
 STATE_DIR.mkdir(parents=True, exist_ok=True)
 
