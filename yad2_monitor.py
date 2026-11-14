@@ -84,8 +84,8 @@ log = logging.getLogger(__name__)
 DEFAULT_CONFIG: Dict[str, Any] = {
     "paused": False,
     "fail_threshold": 3,
-    "scan_interval_minutes": 20,
-    "listen_seconds": 1500,
+    "scan_interval_minutes": 30,
+    "listen_seconds": 18000,
     "last_update_id": 0,
     "awaiting_input": None,
     "sources": {
@@ -1829,10 +1829,11 @@ def car_models_keyboard(src_key: str, mfg_id: str, page: int = 0) -> dict:
 def build_status_text(cfg: dict) -> str:
     paused = cfg.get("paused", False)
     global_state = "🔴 <b>מושהה (Paused)</b>" if paused else "🟢 <b>פעיל (Active)</b>"
+    interval_m = cfg.get("scan_interval_minutes", 30)
     lines = [
         f"🎛 <b>לוח בקרה — Yad2 Cloud Monitor & Market Analyzer</b>",
         f"מצב מערכת: {global_state} | זמן: <code>{now_ist()}</code>",
-        f"חיבור: <b>100% API בענן (נדל״ן + רכב)</b>\n",
+        f"⏱ תדירות בדיקה: <b>כל {interval_m} דקות</b> | חיבור: <b>100% API בענן</b>\n",
         "📍 <b>חיפושים ומדדי שוק מוגדרים:</b>",
     ]
     for src_key, src_info in cfg.get("sources", {}).items():
@@ -3133,14 +3134,14 @@ def main():
 
     listen_sec = args.listen_seconds
     if listen_sec == 0 and os.environ.get("GITHUB_ACTIONS") == "true" and not args.summary:
-        # Stay online for 25 minutes (1500s) inside each 30-min cron window so buttons respond in <1s!
-        listen_sec = int(cfg.get("listen_seconds", 1500))
+        # Stay online for up to 5 hours (18000s) and scan strictly every 30 minutes without GitHub cron delays!
+        listen_sec = int(cfg.get("listen_seconds", 18000))
 
     if listen_sec > 0:
         log.info(f"Listening for interactive Telegram commands for {listen_sec}s…")
         process_telegram_updates(
             listen_seconds=listen_sec,
-            scan_interval_minutes=int(cfg.get("scan_interval_minutes", 20)),
+            scan_interval_minutes=int(cfg.get("scan_interval_minutes", 30)),
         )
 
 
