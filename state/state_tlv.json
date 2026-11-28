@@ -479,7 +479,7 @@
       "url": "https://www.yad2.co.il/item/6mzhg539",
       "hash": "9c7d9e2db26ccd570586cbdeb9715e61",
       "firstSeen": "2026-11-03 12:15:37",
-      "lastSeen": "2026-11-28 21:03:10",
+      "lastSeen": "2026-11-28 21:33:21",
       "active": true,
       "category": "realestate",
       "seller_type": "private"
@@ -499,11 +499,11 @@
       "url": "https://www.yad2.co.il/item/fprd3l3i",
       "hash": "8cfbf31fa0071ae24e01e62d2533f8f7",
       "firstSeen": "2026-11-28 21:03:10",
-      "lastSeen": "2026-11-28 21:03:10",
+      "lastSeen": "2026-11-28 21:33:21",
       "active": true
     }
   },
-  "lastCheck": "2026-11-28 21:03:10",
+  "lastCheck": "2026-11-28 21:33:21",
   "consecutiveFailures": 0,
   "activeCount": 2
 }
